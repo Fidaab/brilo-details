@@ -17,8 +17,9 @@ const SLOT_LABELS = {
 
 const NAV = {
   customer: [
-    { screen: "book",   ico: "✨", label: "Book" },
-    { screen: "visits", ico: "📍", label: "My Visits" },
+    { screen: "book",    ico: "✨", label: "Book" },
+    { screen: "reviews", ico: "⭐", label: "Reviews" },
+    { screen: "visits",  ico: "📍", label: "My Visits" },
   ],
   admin: [
     { screen: "jobs",    ico: "🧽", label: "Jobs" },
@@ -38,10 +39,16 @@ const seed = {
     { id: "d1", name: "Carlos R.", phone: "555-0123" },
     { id: "d2", name: "Maya T.",   phone: "555-0144" },
   ],
+  reviews: [
+    { id: "r1", name: "Marcus L.", rating: 5, vehicle: "Tesla Model 3", text: "Paint looks brand new. Carlos showed up on time and was incredibly thorough.", date: "2026-06-19" },
+    { id: "r2", name: "Priya S.",  rating: 5, vehicle: "Honda CR-V",    text: "Interior refresh was amazing. Smells great and not a speck of dust left.", date: "2026-06-17" },
+    { id: "r3", name: "Dan W.",    rating: 4, vehicle: "Ford F-150",    text: "Great wash and the tire shine really pops. Would book again.", date: "2026-06-15" },
+  ],
   reservations: [],
 };
 
 let state = load();
+if (!Array.isArray(state.reviews)) state.reviews = structuredClone(seed.reviews);
 let currentRole = "customer";
 let boardFilter = "all";
 let selectedPkgId = null;
@@ -98,7 +105,11 @@ function buildNav() {
     btn.className = "nav-item" + (i === 0 ? " active" : "");
     btn.dataset.screen = item.screen;
     btn.innerHTML = `<span class="nav-ico">${item.ico}</span>${item.label}`;
-    btn.addEventListener("click", () => { showScreen(item.screen); if (currentRole === "admin") renderAdmin(); });
+    btn.addEventListener("click", () => {
+      showScreen(item.screen);
+      if (currentRole === "admin") renderAdmin();
+      if (item.screen === "reviews") renderReviews();
+    });
     nav.appendChild(btn);
   });
   showScreen(NAV[currentRole][0].screen);
@@ -200,14 +211,103 @@ function renderCustomerReservations() {
         <div><div class="k">Address</div>${esc(r.address)}</div>
         <div><div class="k">Detailer</div>${r.detailerId ? esc(detailerById(r.detailerId)?.name || "-") : "Not yet assigned"}</div>
       </div>
-      ${canCancel ? `<div class="res-actions"><button class="btn-secondary" data-cancel="${r.id}">Cancel visit</button></div>` : ""}`;
+      ${canCancel ? `<div class="res-actions"><button class="btn-secondary" data-cancel="${r.id}">Cancel visit</button></div>` : ""}
+      ${r.status === "completed" ? `<div class="res-actions"><button class="btn-primary" data-review="${r.id}">Leave a review</button></div>` : ""}`;
     list.appendChild(card);
   });
   list.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", () => {
     state.reservations.find(x => x.id === b.dataset.cancel).status = "cancelled";
     save(); toast("Visit cancelled."); renderCustomerReservations();
   }));
+  list.querySelectorAll("[data-review]").forEach(b => b.addEventListener("click", () => {
+    const r = state.reservations.find(x => x.id === b.dataset.review);
+    document.getElementById("rev-name").value = r.name || "";
+    document.getElementById("rev-vehicle").value = r.vehicle || "";
+    selectedRating = 0; paintStars();
+    showScreen("reviews"); renderReviews();
+    document.getElementById("rev-comment").focus();
+  }));
 }
+
+/* ---------- reviews ---------- */
+let selectedRating = 0;
+
+function starsHtml(rating) {
+  let out = "";
+  for (let i = 1; i <= 5; i++) out += i <= rating ? "★" : `<span class="empty">★</span>`;
+  return out;
+}
+
+function buildStarInput() {
+  const box = document.getElementById("rev-stars");
+  box.innerHTML = "";
+  for (let i = 1; i <= 5; i++) {
+    const s = document.createElement("span");
+    s.className = "star";
+    s.textContent = "★";
+    s.dataset.val = i;
+    s.setAttribute("role", "radio");
+    s.addEventListener("click", () => { selectedRating = i; paintStars(); });
+    box.appendChild(s);
+  }
+  paintStars();
+}
+function paintStars() {
+  document.querySelectorAll("#rev-stars .star").forEach(s =>
+    s.classList.toggle("on", Number(s.dataset.val) <= selectedRating));
+}
+
+function renderReviews() {
+  const list = document.getElementById("reviews-list");
+  const summary = document.getElementById("reviews-summary");
+  const all = [...state.reviews].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+  if (all.length) {
+    const avg = all.reduce((s, r) => s + r.rating, 0) / all.length;
+    summary.innerHTML = `
+      <div><div class="avg">${avg.toFixed(1)}</div></div>
+      <div>
+        <div class="avg-stars">${starsHtml(Math.round(avg))}</div>
+        <div class="avg-count">${all.length} review${all.length === 1 ? "" : "s"}</div>
+      </div>`;
+  } else {
+    summary.innerHTML = `<div class="avg-count">No reviews yet. Be the first to leave one.</div>`;
+  }
+
+  list.innerHTML = "";
+  all.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "review-card";
+    div.innerHTML = `
+      <div class="review-head">
+        <div><div class="review-name">${esc(r.name)}</div>
+        <div class="review-meta">${esc(r.vehicle) || ""}${r.vehicle && r.date ? " · " : ""}${r.date ? fmtDate(r.date) : ""}</div></div>
+        <div class="review-stars">${starsHtml(r.rating)}</div>
+      </div>
+      <div class="review-text">${esc(r.text)}</div>`;
+    list.appendChild(div);
+  });
+}
+
+document.getElementById("submit-review").addEventListener("click", () => {
+  const err = document.getElementById("review-error");
+  const name = document.getElementById("rev-name").value.trim();
+  const vehicle = document.getElementById("rev-vehicle").value.trim();
+  const text = document.getElementById("rev-comment").value.trim();
+  if (!name || !text) return showErr(err, "Please add your name and a comment.");
+  if (!selectedRating) return showErr(err, "Please tap a star rating.");
+
+  state.reviews.push({ id: uid(), name, rating: selectedRating, vehicle, text, date: new Date().toISOString().slice(0, 10) });
+  save();
+  err.classList.add("hidden");
+  document.getElementById("rev-name").value = "";
+  document.getElementById("rev-vehicle").value = "";
+  document.getElementById("rev-comment").value = "";
+  selectedRating = 0; paintStars();
+  renderReviews();
+  document.getElementById("screens").scrollTop = 0;
+  toast("Thanks for your review!");
+});
 
 /* ---------- admin ---------- */
 function renderAdmin() { renderBoard(); renderDetailers(); renderPricingEditor(); }
@@ -361,6 +461,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;"
 /* ---------- init ---------- */
 renderPackages();
 buildNav();
+buildStarInput();
 document.getElementById("cust-reservations").innerHTML = `<div class="empty">Enter your phone number to see your visits.</div>`;
 
 if ("serviceWorker" in navigator) {

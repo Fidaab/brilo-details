@@ -171,6 +171,30 @@ textarea { resize: vertical; }
 .badge.completed { background: rgba(22,163,74,.2); color: #86efac; }
 .badge.cancelled { background: rgba(248,113,113,.18); color: #fca5a5; }
 
+/* Reviews */
+.reviews-summary {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 16px; margin-bottom: 16px;
+}
+.reviews-summary .avg { font-size: 34px; font-weight: 800; line-height: 1; }
+.reviews-summary .avg-stars { color: var(--accent); font-size: 16px; letter-spacing: 1px; }
+.reviews-summary .avg-count { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.review-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 16px; display: flex; flex-direction: column; gap: 8px;
+}
+.review-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.review-name { font-weight: 700; font-size: 15px; }
+.review-meta { color: var(--muted); font-size: 12px; }
+.review-stars { color: var(--accent); font-size: 15px; letter-spacing: 1px; }
+.review-stars .empty { color: var(--border); }
+.review-text { font-size: 14px; color: #d7dee6; }
+
+.star-input { display: flex; gap: 6px; font-size: 30px; line-height: 1; }
+.star-input .star { cursor: pointer; color: var(--border); transition: color .1s; user-select: none; }
+.star-input .star.on { color: var(--accent); }
+
 /* Stats + filters */
 .stats { display: flex; gap: 14px; color: var(--muted); font-size: 13px; margin-bottom: 14px; flex-wrap: wrap; }
 .stats b { color: var(--text); }

@@ -79,6 +79,22 @@
           <div id="cust-reservations" class="reservation-list"></div>
         </section>
 
+        <!-- ===== CUSTOMER: REVIEWS ===== -->
+        <section class="screen" data-screen="reviews">
+          <h2 class="section-title">Reviews</h2>
+          <div id="reviews-summary" class="reviews-summary"></div>
+          <div id="reviews-list" class="reservation-list"></div>
+          <div class="card form-card">
+            <h3>Leave a review</h3>
+            <div class="field"><label>Your name</label><input type="text" id="rev-name" placeholder="Jane Doe" /></div>
+            <div class="field"><label>Rating</label><div class="star-input" id="rev-stars" role="radiogroup" aria-label="Rating"></div></div>
+            <div class="field"><label>Vehicle (optional)</label><input type="text" id="rev-vehicle" placeholder="2021 Honda Civic" /></div>
+            <div class="field"><label>Comment</label><textarea id="rev-comment" rows="3" placeholder="Tell others how it went..."></textarea></div>
+            <div id="review-error" class="error hidden"></div>
+            <button class="btn-primary block" id="submit-review">Post review</button>
+          </div>
+        </section>
+
         <!-- ===== ADMIN: JOBS ===== -->
         <section class="screen" data-screen="jobs">
           <h2 class="section-title">Jobs</h2>
