@@ -1,6 +1,4 @@
-/* Brilo Details - mobile PWA logic. Data persists in localStorage. */
-
-const STORE_KEY = "brilo.v1";
+/* Brilo Details - mobile PWA logic. Data via Store (Supabase cloud or local). */
 
 const STATUS = {
   requested:  { label: "Requested",  next: "assigned" },
@@ -28,37 +26,14 @@ const NAV = {
   ],
 };
 
-const seed = {
-  packages: [
-    { id: "p1", name: "Express Wash",     price: 49,  duration: 45,  desc: "Exterior hand wash, dry, and tire shine." },
-    { id: "p2", name: "Interior Refresh", price: 89,  duration: 90,  desc: "Full vacuum, wipe-down, glass, and air freshener." },
-    { id: "p3", name: "Full Detail",      price: 179, duration: 180, desc: "Interior and exterior deep clean, wax, and trim restore." },
-    { id: "p4", name: "Ceramic Coat",     price: 449, duration: 300, desc: "Paint correction plus 12-month ceramic coating." },
-  ],
-  detailers: [
-    { id: "d1", name: "Carlos R.", phone: "555-0123" },
-    { id: "d2", name: "Maya T.",   phone: "555-0144" },
-  ],
-  reviews: [
-    { id: "r1", name: "Marcus L.", rating: 5, vehicle: "Tesla Model 3", text: "Paint looks brand new. Carlos showed up on time and was incredibly thorough.", date: "2026-06-19" },
-    { id: "r2", name: "Priya S.",  rating: 5, vehicle: "Honda CR-V",    text: "Interior refresh was amazing. Smells great and not a speck of dust left.", date: "2026-06-17" },
-    { id: "r3", name: "Dan W.",    rating: 4, vehicle: "Ford F-150",    text: "Great wash and the tire shine really pops. Would book again.", date: "2026-06-15" },
-  ],
-  reservations: [],
-};
+/* Service packages, detailers, and reviews are provided by Store (store.js). */
 
-let state = load();
-if (!Array.isArray(state.reviews)) state.reviews = structuredClone(seed.reviews);
+
+let state = window.Store.data;   // populated by Store.init() below
 let currentRole = "customer";
 let boardFilter = "all";
 let selectedPkgId = null;
 
-function load() {
-  try { const raw = localStorage.getItem(STORE_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
-  return structuredClone(seed);
-}
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
-function uid() { return Math.random().toString(36).slice(2, 9); }
 function pkgById(id) { return state.packages.find(p => p.id === id); }
 function detailerById(id) { return state.detailers.find(d => d.id === id); }
 
@@ -166,11 +141,10 @@ document.getElementById("submit-booking").addEventListener("click", () => {
   if (isWeekend(date))
     return showErr(err, "We only book on weekdays (Monday to Friday). Please pick a weekday.");
 
-  state.reservations.push({
-    id: uid(), pkgId: selectedPkgId, name, phone, vehicle, address, date, slot, notes,
-    status: "requested", detailerId: null, createdAt: Date.now(),
+  Store.addReservation({
+    pkgId: selectedPkgId, name, phone, vehicle, address, date, slot, notes,
+    status: "requested", detailerId: null,
   });
-  save();
   toast("Reservation confirmed. We'll assign a detailer shortly.");
   ["cust-name","cust-vehicle","cust-address","cust-notes"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("lookup-phone").value = phone;
@@ -216,8 +190,8 @@ function renderCustomerReservations() {
     list.appendChild(card);
   });
   list.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", () => {
-    state.reservations.find(x => x.id === b.dataset.cancel).status = "cancelled";
-    save(); toast("Visit cancelled."); renderCustomerReservations();
+    Store.updateReservation(b.dataset.cancel, { status: "cancelled" });
+    toast("Visit cancelled."); renderCustomerReservations();
   }));
   list.querySelectorAll("[data-review]").forEach(b => b.addEventListener("click", () => {
     const r = state.reservations.find(x => x.id === b.dataset.review);
@@ -297,8 +271,7 @@ document.getElementById("submit-review").addEventListener("click", () => {
   if (!name || !text) return showErr(err, "Please add your name and a comment.");
   if (!selectedRating) return showErr(err, "Please tap a star rating.");
 
-  state.reviews.push({ id: uid(), name, rating: selectedRating, vehicle, text, date: new Date().toISOString().slice(0, 10) });
-  save();
+  Store.addReview({ name, rating: selectedRating, vehicle, text, date: new Date().toISOString().slice(0, 10) });
   err.classList.add("hidden");
   document.getElementById("rev-name").value = "";
   document.getElementById("rev-vehicle").value = "";
@@ -361,21 +334,21 @@ function renderBoard() {
 
   list.querySelectorAll("[data-assign]").forEach(sel => sel.addEventListener("change", () => {
     const r = state.reservations.find(x => x.id === sel.dataset.assign);
-    r.detailerId = sel.value || null;
-    if (r.detailerId && r.status === "requested") r.status = "assigned";
-    if (!r.detailerId && r.status === "assigned") r.status = "requested";
-    save(); renderBoard();
-    toast(r.detailerId ? "Detailer assigned." : "Detailer unassigned.");
+    const patch = { detailerId: sel.value || null };
+    if (patch.detailerId && r.status === "requested") patch.status = "assigned";
+    if (!patch.detailerId && r.status === "assigned") patch.status = "requested";
+    Store.updateReservation(r.id, patch); renderBoard();
+    toast(patch.detailerId ? "Detailer assigned." : "Detailer unassigned.");
   }));
   list.querySelectorAll("[data-advance]").forEach(btn => btn.addEventListener("click", () => {
     const r = state.reservations.find(x => x.id === btn.dataset.advance);
     const next = STATUS[r.status].next;
     if ((next === "on_the_way" || next === "assigned") && !r.detailerId) { toast("Assign a detailer first."); return; }
-    r.status = next; save(); renderBoard(); toast(`Status: ${STATUS[next].label}`);
+    Store.updateReservation(r.id, { status: next }); renderBoard(); toast(`Status: ${STATUS[next].label}`);
   }));
   list.querySelectorAll("[data-admincancel]").forEach(btn => btn.addEventListener("click", () => {
-    state.reservations.find(x => x.id === btn.dataset.admincancel).status = "cancelled";
-    save(); renderBoard(); toast("Job cancelled.");
+    Store.updateReservation(btn.dataset.admincancel, { status: "cancelled" });
+    renderBoard(); toast("Job cancelled.");
   }));
 }
 
@@ -394,10 +367,8 @@ function renderDetailers() {
     grid.appendChild(div);
   });
   grid.querySelectorAll("[data-deldetailer]").forEach(b => b.addEventListener("click", () => {
-    const id = b.dataset.deldetailer;
-    state.detailers = state.detailers.filter(d => d.id !== id);
-    state.reservations.forEach(r => { if (r.detailerId === id) { r.detailerId = null; if (r.status === "assigned") r.status = "requested"; } });
-    save(); renderAdmin(); toast("Detailer removed.");
+    Store.removeDetailer(b.dataset.deldetailer);
+    renderAdmin(); toast("Detailer removed.");
   }));
 }
 
@@ -405,7 +376,7 @@ document.getElementById("add-detailer").addEventListener("click", () => {
   const name = document.getElementById("new-detailer-name").value.trim();
   const phone = document.getElementById("new-detailer-phone").value.trim();
   if (!name) { toast("Enter a name."); return; }
-  state.detailers.push({ id: uid(), name, phone }); save();
+  Store.addDetailer({ name, phone });
   document.getElementById("new-detailer-name").value = "";
   document.getElementById("new-detailer-phone").value = "";
   renderDetailers(); toast("Detailer added.");
@@ -426,12 +397,12 @@ function renderPricingEditor() {
     grid.appendChild(div);
   });
   grid.querySelectorAll("[data-price]").forEach(inp => inp.addEventListener("change", () => {
-    pkgById(inp.dataset.price).price = Math.max(0, Number(inp.value) || 0);
-    save(); renderPackages(); toast("Price updated.");
+    Store.updatePackage(inp.dataset.price, { price: Math.max(0, Number(inp.value) || 0) });
+    renderPackages(); toast("Price updated.");
   }));
   grid.querySelectorAll("[data-delpkg]").forEach(b => b.addEventListener("click", () => {
-    state.packages = state.packages.filter(p => p.id !== b.dataset.delpkg);
-    save(); renderPricingEditor(); renderPackages(); toast("Package removed.");
+    Store.removePackage(b.dataset.delpkg);
+    renderPricingEditor(); renderPackages(); toast("Package removed.");
   }));
 }
 
@@ -441,28 +412,43 @@ document.getElementById("add-pkg").addEventListener("click", () => {
   const duration = Number(document.getElementById("new-pkg-duration").value) || 60;
   const desc = document.getElementById("new-pkg-desc").value.trim();
   if (!name || isNaN(price)) { toast("Enter a name and price."); return; }
-  state.packages.push({ id: uid(), name, price, duration, desc }); save();
+  Store.addPackage({ name, price, duration, desc });
   ["new-pkg-name","new-pkg-price","new-pkg-duration","new-pkg-desc"].forEach(id => document.getElementById(id).value = "");
   renderPricingEditor(); renderPackages(); toast("Package added.");
 });
 
 document.getElementById("reset-data").addEventListener("click", () => {
   if (confirm("Reset all demo data back to defaults?")) {
-    state = structuredClone(seed); save();
-    renderPackages(); renderAdmin();
-    document.getElementById("cust-reservations").innerHTML = `<div class="empty">Enter your phone number to see your visits.</div>`;
-    toast("Demo data reset.");
+    if (Store.reset()) {
+      renderPackages(); renderAdmin();
+      document.getElementById("cust-reservations").innerHTML = `<div class="empty">Enter your phone number to see your visits.</div>`;
+      toast("Demo data reset.");
+    }
   }
 });
 
 /* ---------- utils ---------- */
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 
+/* Re-render everything currently on screen (called on realtime updates). */
+function rerender() {
+  if (!state) return;
+  renderPackages();
+  renderReviews();
+  if (currentRole === "admin") renderAdmin();
+  renderCustomerReservations();
+}
+
 /* ---------- init ---------- */
-renderPackages();
-buildNav();
-buildStarInput();
 document.getElementById("cust-reservations").innerHTML = `<div class="empty">Enter your phone number to see your visits.</div>`;
+
+Store.init(rerender).then(({ cloud }) => {
+  state = Store.data;
+  document.querySelector(".brand-sub").textContent = cloud ? "Mobile detailing · Live" : "Mobile detailing";
+  renderPackages();
+  buildNav();
+  buildStarInput();
+}).catch(err => { console.error(err); toast("Could not load data."); });
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
