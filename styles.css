@@ -235,6 +235,33 @@ textarea { resize: vertical; }
 /* Form hint */
 .form-hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; }
 
+/* Profile bar */
+.profile-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.profile-bar .who { color: var(--text); font-weight: 600; }
+.profile-bar .who .accent { color: var(--accent); }
+.profile-bar .switch {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 5px 13px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.profile-bar .switch:active { color: var(--text); border-color: var(--accent); }
+
+/* Share card */
+.share-card { text-align: center; }
+.share-card .form-hint { text-align: left; }
+.share-qr {
+  display: block; margin: 4px auto 14px; width: 200px; height: 200px;
+  border-radius: 12px; background: #fff; padding: 10px;
+}
+.share-link { display: flex; gap: 8px; }
+.share-link input { flex: 1; }
+
 /* Gallery */
 .gallery-grid { display: flex; flex-direction: column; gap: 16px; margin-bottom: 18px; }
 .media-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }

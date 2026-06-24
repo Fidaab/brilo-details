@@ -94,10 +94,56 @@ function buildNav() {
 
 function renderForScreen(screen) {
   switch (screen) {
-    case "reviews": renderReviews(); break;
+    case "reviews": renderReviews(); prefillIdentity(); break;
     case "gallery": renderGallery(); break;
+    case "visits": renderVisitsScreen(); break;
     case "jobs": case "team": case "pricing": case "adgallery": case "inbox": renderAdmin(); break;
   }
+}
+
+/* ---------- profile (device-remembered sign-in) ---------- */
+const PROFILE_KEY = "brilo.profile";
+function getProfile() { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)); } catch { return null; } }
+function saveProfile(p) { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch {} }
+function signOut() { try { localStorage.removeItem(PROFILE_KEY); } catch {} }
+
+function renderProfileBar() {
+  const bar = document.getElementById("profile-bar");
+  const p = getProfile();
+  if (currentRole !== "customer" || !p) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
+  bar.classList.remove("hidden");
+  bar.innerHTML = `<span class="who">👋 Hi, <span class="accent">${esc(p.name)}</span></span><button class="switch" id="switch-acct">Switch</button>`;
+  document.getElementById("switch-acct").addEventListener("click", () => {
+    signOut();
+    document.getElementById("lookup-phone").value = "";
+    renderProfileBar();
+    renderVisitsScreen();
+    toast("Signed out on this device.");
+  });
+}
+
+function prefillIdentity() {
+  const p = getProfile();
+  if (!p) return;
+  const setIfEmpty = (id, val) => { const el = document.getElementById(id); if (el && !el.value) el.value = val || ""; };
+  setIfEmpty("rev-name", p.name);
+  setIfEmpty("sug-name", p.name);
+}
+
+/* Render the My Visits screen depending on sign-in state. */
+function renderVisitsScreen() {
+  const p = getProfile();
+  const signinCard = document.getElementById("signin-card");
+  const lookupRow = document.getElementById("lookup-row");
+  if (p) {
+    signinCard.classList.add("hidden");
+    lookupRow.classList.add("hidden");
+    document.getElementById("lookup-phone").value = p.phone || "";
+  } else {
+    signinCard.classList.remove("hidden");
+    lookupRow.classList.remove("hidden");
+  }
+  renderCustomerReservations();
 }
 
 document.querySelectorAll(".role-opt").forEach(btn => {
@@ -106,6 +152,7 @@ document.querySelectorAll(".role-opt").forEach(btn => {
     btn.classList.add("active");
     currentRole = btn.dataset.role;
     buildNav();
+    renderProfileBar();
     if (currentRole === "admin") renderAdmin();
   });
 });
@@ -133,6 +180,11 @@ function openBooking(pkgId) {
   const p = pkgById(pkgId);
   document.getElementById("selected-pkg-name").textContent = p.name;
   document.getElementById("selected-pkg-price").textContent = "$" + p.price;
+  const me = getProfile();
+  if (me) {
+    if (!document.getElementById("cust-name").value) document.getElementById("cust-name").value = me.name || "";
+    if (!document.getElementById("cust-phone").value) document.getElementById("cust-phone").value = me.phone || "";
+  }
   const dateInput = document.getElementById("cust-date");
   dateInput.min = nextWeekdayISO();
   dateInput.value = nextWeekdayISO();
@@ -156,11 +208,13 @@ document.getElementById("submit-booking").addEventListener("click", () => {
     status: "requested", detailerId: null,
   });
   toast("Reservation confirmed. We'll assign a detailer shortly.");
+  saveProfile({ name, phone });
+  renderProfileBar();
   ["cust-name","cust-vehicle","cust-address","cust-notes"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("lookup-phone").value = phone;
   selectedPkgId = null;
   showScreen("visits");
-  renderCustomerReservations();
+  renderVisitsScreen();
 });
 
 function showErr(el, msg) { el.textContent = msg; el.classList.remove("hidden"); }
@@ -168,6 +222,24 @@ function showErr(el, msg) { el.textContent = msg; el.classList.remove("hidden");
 /* ---------- customer: my visits ---------- */
 document.getElementById("lookup-btn").addEventListener("click", renderCustomerReservations);
 document.getElementById("lookup-phone").addEventListener("keydown", e => { if (e.key === "Enter") renderCustomerReservations(); });
+
+document.getElementById("signin-save").addEventListener("click", () => {
+  const name = document.getElementById("signin-name").value.trim();
+  const phone = document.getElementById("signin-phone").value.trim();
+  if (!name || !phone) { toast("Enter your name and phone."); return; }
+  saveProfile({ name, phone });
+  document.getElementById("signin-name").value = "";
+  document.getElementById("signin-phone").value = "";
+  renderProfileBar();
+  renderVisitsScreen();
+  toast("Saved. Welcome, " + name + "!");
+});
+
+document.getElementById("copy-link").addEventListener("click", async () => {
+  const url = document.getElementById("share-url").value;
+  try { await navigator.clipboard.writeText(url); toast("Link copied."); }
+  catch { const i = document.getElementById("share-url"); i.select(); document.execCommand("copy"); toast("Link copied."); }
+});
 
 function renderCustomerReservations() {
   const phone = document.getElementById("lookup-phone").value.trim();
@@ -334,7 +406,7 @@ function renderGallery() {
     const inp = list.querySelector(`[data-cinput="${id}"]`);
     const text = inp.value.trim();
     if (!text) { inp.focus(); return; }
-    Store.addMediaComment({ mediaId: id, name: "", text });
+    Store.addMediaComment({ mediaId: id, name: (getProfile()?.name || ""), text });
     inp.value = "";
     renderGallery();
     toast("Comment posted.");
@@ -583,6 +655,7 @@ function rerender() {
   renderPackages();
   renderReviews();
   renderGallery();
+  renderProfileBar();
   if (currentRole === "admin") renderAdmin();
   renderCustomerReservations();
 }
@@ -596,6 +669,9 @@ Store.init(rerender).then(({ cloud }) => {
   renderPackages();
   buildNav();
   buildStarInput();
+  renderProfileBar();
+  prefillIdentity();
+  renderVisitsScreen();
 }).catch(err => { console.error(err); toast("Could not load data."); });
 
 if ("serviceWorker" in navigator) {

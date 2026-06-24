@@ -1,5 +1,5 @@
 /* BriloDetails service worker - basic offline cache */
-const CACHE = "brilo-v4";
+const CACHE = "brilo-v5";
 const ASSETS = [
   "./index.html",
   "./styles.css",
@@ -8,6 +8,7 @@ const ASSETS = [
   "./config.js",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./qr.png",
 ];
 
 self.addEventListener("install", e => {

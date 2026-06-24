@@ -29,9 +29,12 @@
         </div>
         <div class="role-toggle" id="role-toggle">
           <button class="role-opt active" data-role="customer">Book</button>
-          <button class="role-opt" data-role="admin">Owner</button>
+          <button class="role-opt" data-role="admin">Admin</button>
         </div>
       </header>
+
+      <!-- Device-remembered profile bar (customer role) -->
+      <div id="profile-bar" class="profile-bar hidden"></div>
 
       <!-- Scrollable screen area -->
       <main class="screens" id="screens">
@@ -72,7 +75,14 @@
         <!-- ===== CUSTOMER: MY VISITS ===== -->
         <section class="screen" data-screen="visits">
           <h2 class="section-title">My visits</h2>
-          <div class="lookup-row">
+          <div class="card form-card" id="signin-card">
+            <h3>Save your details</h3>
+            <p class="form-hint">Remember me on this device so I don't have to type my number each time.</p>
+            <div class="field"><label>Your name</label><input type="text" id="signin-name" placeholder="Jane Doe" /></div>
+            <div class="field"><label>Phone</label><input type="tel" id="signin-phone" placeholder="555-0100" /></div>
+            <button class="btn-primary block" id="signin-save">Save &amp; view my visits</button>
+          </div>
+          <div class="lookup-row" id="lookup-row">
             <input type="tel" id="lookup-phone" placeholder="Your phone number" />
             <button class="btn-primary" id="lookup-btn">Find</button>
           </div>
@@ -175,6 +185,15 @@
             <div class="field"><label>Description</label><input type="text" id="new-pkg-desc" placeholder="Exterior wash & dry" /></div>
             <button class="btn-primary block" id="add-pkg">Add package</button>
             <button class="link-btn" id="reset-data">Reset demo data</button>
+          </div>
+          <div class="card form-card share-card">
+            <h3>Share BriloDetails</h3>
+            <p class="form-hint">Customers scan this code or open the link. No install needed.</p>
+            <img class="share-qr" src="qr.png" alt="QR code linking to BriloDetails" width="200" height="200" />
+            <div class="share-link">
+              <input type="text" id="share-url" readonly value="https://fidaab.github.io/brilo-details/" />
+              <button class="btn-secondary" id="copy-link">Copy</button>
+            </div>
           </div>
         </section>
 
