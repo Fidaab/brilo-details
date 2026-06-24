@@ -34,7 +34,7 @@
     media: [
       { id: "m1", type: "image", url: "https://picsum.photos/seed/brilo-detail-1/800/500", caption: "Full Detail · Tesla Model 3", createdAt: 1 },
       { id: "m2", type: "image", url: "https://picsum.photos/seed/brilo-detail-2/800/500", caption: "Interior Refresh · Honda CR-V", createdAt: 2 },
-      { id: "m3", type: "video", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4", caption: "Ceramic coat in action", createdAt: 3 },
+      { id: "m3", type: "video", url: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4", caption: "Ceramic coat in action", createdAt: 3 },
     ],
     mediaComments: [
       { id: "mc1", mediaId: "m1", name: "Marcus L.", text: "That shine is unreal!", createdAt: 4 },

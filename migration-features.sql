@@ -30,7 +30,7 @@ insert into media (type, url, caption)
 select * from (values
   ('image','https://picsum.photos/seed/brilo-detail-1/800/500','Full Detail · Tesla Model 3'),
   ('image','https://picsum.photos/seed/brilo-detail-2/800/500','Interior Refresh · Honda CR-V'),
-  ('video','https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4','Ceramic coat in action')
+  ('video','https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4','Ceramic coat in action')
 ) as v(type, url, caption)
 where not exists (select 1 from media);
 
