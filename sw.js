@@ -1,5 +1,5 @@
 /* BriloDetails service worker - basic offline cache */
-const CACHE = "brilo-v6";
+const CACHE = "brilo-v7";
 const ASSETS = [
   "./index.html",
   "./styles.css",

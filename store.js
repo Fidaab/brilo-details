@@ -91,17 +91,20 @@
     return JSON.parse(JSON.stringify(seed));
   }
 
-  /* ---------- cloud helpers ---------- */
+  /* ---------- cloud helpers ----------
+     NOTE: select explicit columns, never "*". On Supabase/PostgREST, "select=*"
+     can return incomplete rows on recently-created tables (stale "*" expansion
+     in the schema cache), which silently drops data. Explicit columns are reliable. */
   async function refetchAll() {
     const [pk, dt, rs, rv, md, mc, sg, jn] = await Promise.all([
-      sb.from("packages").select("*").order("price", { ascending: true }),
-      sb.from("detailers").select("*").order("name", { ascending: true }),
-      sb.from("reservations").select("*").order("created_at", { ascending: false }),
-      sb.from("reviews").select("*").order("date", { ascending: false }),
-      sb.from("media").select("*"),
-      sb.from("media_comments").select("*"),
-      sb.from("suggestions").select("*"),
-      sb.from("job_notes").select("*"),
+      sb.from("packages").select("id,name,price,duration,description").order("price", { ascending: true }),
+      sb.from("detailers").select("id,name,phone").order("name", { ascending: true }),
+      sb.from("reservations").select("id,pkg_id,name,phone,vehicle,address,date,slot,notes,status,detailer_id,created_at"),
+      sb.from("reviews").select("id,name,rating,vehicle,comment,date"),
+      sb.from("media").select("id,type,url,caption,created_at"),
+      sb.from("media_comments").select("id,media_id,name,text,created_at"),
+      sb.from("suggestions").select("id,name,message,status,created_at"),
+      sb.from("job_notes").select("id,reservation_id,author,name,text,created_at"),
     ]);
     if (pk.data) replace(data.packages, pk.data.map(fromPkg));
     if (dt.data) replace(data.detailers, dt.data.map(fromDet));
