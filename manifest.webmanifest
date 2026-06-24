@@ -1,13 +1,13 @@
 {
-  "name": "Brilo Details",
-  "short_name": "Brilo",
+  "name": "BriloDetails",
+  "short_name": "BriloDetails",
   "description": "Mobile car detailing booking and dispatch.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0B0F14",
-  "theme_color": "#0B0F14",
+  "background_color": "#15101F",
+  "theme_color": "#15101F",
   "icons": [
     {
       "src": "./icon.svg",

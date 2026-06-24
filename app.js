@@ -1,4 +1,4 @@
-/* Brilo Details - mobile PWA logic. Data via Store (Supabase cloud or local). */
+/* BriloDetails - mobile PWA logic. Data via Store (Supabase cloud or local). */
 
 const STATUS = {
   requested:  { label: "Requested",  next: "assigned" },
@@ -16,13 +16,16 @@ const SLOT_LABELS = {
 const NAV = {
   customer: [
     { screen: "book",    ico: "✨", label: "Book" },
+    { screen: "gallery", ico: "🎬", label: "Gallery" },
     { screen: "reviews", ico: "⭐", label: "Reviews" },
     { screen: "visits",  ico: "📍", label: "My Visits" },
   ],
   admin: [
-    { screen: "jobs",    ico: "🧽", label: "Jobs" },
-    { screen: "team",    ico: "👥", label: "Team" },
-    { screen: "pricing", ico: "💲", label: "Pricing" },
+    { screen: "jobs",     ico: "🧽", label: "Jobs" },
+    { screen: "adgallery",ico: "🎬", label: "Gallery" },
+    { screen: "inbox",    ico: "💬", label: "Inbox" },
+    { screen: "team",     ico: "👥", label: "Team" },
+    { screen: "pricing",  ico: "💲", label: "Pricing" },
   ],
 };
 
@@ -51,7 +54,7 @@ function arrivalText(r) {
   const name = detailerById(r.detailerId)?.name || "";
   if (r.status === "on_the_way") return `Your detailer ${name} is on the way. Arriving around ${start}.`;
   if (r.status === "assigned")   return `${name || "A detailer"} is scheduled to arrive ${fmtDate(r.date)} at ${start}.`;
-  if (r.status === "completed")  return `Completed on ${fmtDate(r.date)}. Thanks for choosing Brilo.`;
+  if (r.status === "completed")  return `Completed on ${fmtDate(r.date)}. Thanks for choosing BriloDetails.`;
   if (r.status === "requested")  return `Requested for ${fmtDate(r.date)} at ${start}. Awaiting detailer assignment.`;
   return "Reservation cancelled.";
 }
@@ -82,12 +85,19 @@ function buildNav() {
     btn.innerHTML = `<span class="nav-ico">${item.ico}</span>${item.label}`;
     btn.addEventListener("click", () => {
       showScreen(item.screen);
-      if (currentRole === "admin") renderAdmin();
-      if (item.screen === "reviews") renderReviews();
+      renderForScreen(item.screen);
     });
     nav.appendChild(btn);
   });
   showScreen(NAV[currentRole][0].screen);
+}
+
+function renderForScreen(screen) {
+  switch (screen) {
+    case "reviews": renderReviews(); break;
+    case "gallery": renderGallery(); break;
+    case "jobs": case "team": case "pricing": case "adgallery": case "inbox": renderAdmin(); break;
+  }
 }
 
 document.querySelectorAll(".role-opt").forEach(btn => {
@@ -282,8 +292,145 @@ document.getElementById("submit-review").addEventListener("click", () => {
   toast("Thanks for your review!");
 });
 
+/* ---------- gallery (photos + videos + comments) ---------- */
+function isYouTube(url) { return /youtube\.com|youtu\.be/.test(url); }
+function ytEmbed(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
+  return "https://www.youtube.com/embed/" + (m ? m[1] : "");
+}
+function mediaFrameHtml(m) {
+  if (m.type === "video") {
+    if (isYouTube(m.url)) return `<iframe class="media-frame" src="${esc(ytEmbed(m.url))}" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>`;
+    return `<video class="media-frame" src="${esc(m.url)}" controls preload="metadata" playsinline></video>`;
+  }
+  return `<img class="media-frame" src="${esc(m.url)}" alt="${esc(m.caption)}" loading="lazy" />`;
+}
+
+function renderGallery() {
+  const list = document.getElementById("gallery-list");
+  const items = [...state.media].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (!items.length) { list.innerHTML = `<div class="empty">No work posted yet. Check back soon.</div>`; return; }
+  list.innerHTML = "";
+  items.forEach(m => {
+    const comments = state.mediaComments.filter(c => c.mediaId === m.id).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const card = document.createElement("div");
+    card.className = "media-card";
+    card.innerHTML = `
+      ${mediaFrameHtml(m)}
+      <div class="media-body">
+        <div class="media-caption">${esc(m.caption) || (m.type === "video" ? "Video" : "Photo")}</div>
+        <div class="comments">${comments.length
+          ? comments.map(c => `<div class="comment"><span class="c-name">${esc(c.name) || "Guest"}:</span> <span class="c-text">${esc(c.text)}</span></div>`).join("")
+          : `<div class="comment-empty">No comments yet. Be the first.</div>`}</div>
+        <div class="comment-form">
+          <input type="text" placeholder="Add a comment..." data-cinput="${m.id}" maxlength="200" />
+          <button class="btn-primary" data-csend="${m.id}">Post</button>
+        </div>
+      </div>`;
+    list.appendChild(card);
+  });
+  list.querySelectorAll("[data-csend]").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.csend;
+    const inp = list.querySelector(`[data-cinput="${id}"]`);
+    const text = inp.value.trim();
+    if (!text) { inp.focus(); return; }
+    Store.addMediaComment({ mediaId: id, name: "", text });
+    inp.value = "";
+    renderGallery();
+    toast("Comment posted.");
+  }));
+}
+
+function renderAdminGallery() {
+  const list = document.getElementById("admin-gallery-list");
+  const items = [...state.media].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (!items.length) { list.innerHTML = `<div class="empty">No media yet. Add your first below.</div>`; }
+  else {
+    list.innerHTML = "";
+    items.forEach(m => {
+      const cc = state.mediaComments.filter(c => c.mediaId === m.id).length;
+      const div = document.createElement("div");
+      div.className = "media-card";
+      div.innerHTML = `
+        ${mediaFrameHtml(m)}
+        <div class="media-body">
+          <div class="media-caption">${esc(m.caption) || (m.type === "video" ? "Video" : "Photo")}</div>
+          <div class="media-meta">${m.type === "video" ? "🎬 Video" : "🖼 Photo"} · ${cc} comment${cc === 1 ? "" : "s"}</div>
+          <button class="link-btn" data-delmedia="${m.id}" style="text-align:left;width:auto;margin:0;padding:4px 0;">Remove</button>
+        </div>`;
+      list.appendChild(div);
+    });
+  }
+  list.querySelectorAll("[data-delmedia]").forEach(b => b.addEventListener("click", () => {
+    Store.removeMedia(b.dataset.delmedia);
+    renderAdminGallery(); renderGallery(); toast("Media removed.");
+  }));
+}
+
+document.getElementById("add-media").addEventListener("click", () => {
+  const type = document.getElementById("new-media-type").value;
+  const url = document.getElementById("new-media-url").value.trim();
+  const caption = document.getElementById("new-media-caption").value.trim();
+  if (!url) { toast("Enter a media URL."); return; }
+  Store.addMedia({ type, url, caption });
+  document.getElementById("new-media-url").value = "";
+  document.getElementById("new-media-caption").value = "";
+  renderAdminGallery(); renderGallery(); toast("Media added.");
+});
+
+/* ---------- suggestions ---------- */
+function fmtDateTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " · " +
+         d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function renderSuggestions() {
+  const list = document.getElementById("suggestion-list");
+  const items = [...state.suggestions].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const newCount = items.filter(s => s.status !== "reviewed").length;
+  const stats = document.getElementById("inbox-stats");
+  if (stats) stats.innerHTML = `<span><b>${items.length}</b> total</span><span><b>${newCount}</b> new</span>`;
+  if (!items.length) { list.innerHTML = `<div class="empty">No suggestions yet.</div>`; return; }
+  list.innerHTML = "";
+  items.forEach(s => {
+    const card = document.createElement("div");
+    card.className = "res-card";
+    card.innerHTML = `
+      <div class="res-head">
+        <div><div class="res-title">${esc(s.name) || "Anonymous"}</div>
+        <div class="res-sub">${s.createdAt ? fmtDateTime(s.createdAt) : ""}</div></div>
+        <span class="badge ${s.status === "reviewed" ? "completed" : "requested"}">${s.status === "reviewed" ? "Reviewed" : "New"}</span>
+      </div>
+      <div class="review-text">${esc(s.message)}</div>
+      <div class="res-actions">
+        ${s.status !== "reviewed" ? `<button class="btn-primary" data-sugdone="${s.id}">Mark reviewed</button>` : ""}
+        <button class="btn-secondary" data-sugdel="${s.id}">Delete</button>
+      </div>`;
+    list.appendChild(card);
+  });
+  list.querySelectorAll("[data-sugdone]").forEach(b => b.addEventListener("click", () => {
+    Store.updateSuggestion(b.dataset.sugdone, { status: "reviewed" }); renderSuggestions(); toast("Marked reviewed.");
+  }));
+  list.querySelectorAll("[data-sugdel]").forEach(b => b.addEventListener("click", () => {
+    Store.removeSuggestion(b.dataset.sugdel); renderSuggestions(); toast("Suggestion deleted.");
+  }));
+}
+
+document.getElementById("submit-suggestion").addEventListener("click", () => {
+  const err = document.getElementById("suggestion-error");
+  const name = document.getElementById("sug-name").value.trim();
+  const message = document.getElementById("sug-message").value.trim();
+  if (!message) return showErr(err, "Please write your suggestion.");
+  Store.addSuggestion({ name, message });
+  err.classList.add("hidden");
+  document.getElementById("sug-name").value = "";
+  document.getElementById("sug-message").value = "";
+  toast("Thanks! Your suggestion was sent.");
+});
+
 /* ---------- admin ---------- */
-function renderAdmin() { renderBoard(); renderDetailers(); renderPricingEditor(); }
+function renderAdmin() { renderBoard(); renderDetailers(); renderPricingEditor(); renderAdminGallery(); renderSuggestions(); }
 
 document.querySelectorAll("#filter-row .chip").forEach(chip => {
   chip.addEventListener("click", () => {
@@ -435,6 +582,7 @@ function rerender() {
   if (!state) return;
   renderPackages();
   renderReviews();
+  renderGallery();
   if (currentRole === "admin") renderAdmin();
   renderCustomerReservations();
 }

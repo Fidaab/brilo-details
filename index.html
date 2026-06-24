@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
-  <meta name="theme-color" content="#0B0F14" />
+  <meta name="theme-color" content="#15101F" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Brilo" />
+  <meta name="apple-mobile-web-app-title" content="BriloDetails" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <title>Brilo Details</title>
+  <title>BriloDetails</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -23,7 +23,7 @@
         <div class="brand">
           <span class="brand-mark">B</span>
           <div class="brand-text">
-            <span class="brand-name">BRILO DETAILS</span>
+            <span class="brand-name">BRILODETAILS</span>
             <span class="brand-sub">Mobile detailing</span>
           </div>
         </div>
@@ -79,6 +79,15 @@
           <div id="cust-reservations" class="reservation-list"></div>
         </section>
 
+        <!-- ===== CUSTOMER: GALLERY ===== -->
+        <section class="screen" data-screen="gallery">
+          <div class="hero">
+            <h1>Our <span class="accent">work.</span></h1>
+            <p>Real results from real details. Watch the clips, leave a comment.</p>
+          </div>
+          <div id="gallery-list" class="gallery-grid"></div>
+        </section>
+
         <!-- ===== CUSTOMER: REVIEWS ===== -->
         <section class="screen" data-screen="reviews">
           <h2 class="section-title">Reviews</h2>
@@ -92,6 +101,14 @@
             <div class="field"><label>Comment</label><textarea id="rev-comment" rows="3" placeholder="Tell others how it went..."></textarea></div>
             <div id="review-error" class="error hidden"></div>
             <button class="btn-primary block" id="submit-review">Post review</button>
+          </div>
+          <div class="card form-card">
+            <h3>Have a suggestion?</h3>
+            <p class="form-hint">Tell us what service, time slot, or feature you'd love to see.</p>
+            <div class="field"><label>Your name (optional)</label><input type="text" id="sug-name" placeholder="Jane Doe" /></div>
+            <div class="field"><label>Your idea</label><textarea id="sug-message" rows="3" placeholder="e.g. Add a pet-hair removal add-on, or evening slots."></textarea></div>
+            <div id="suggestion-error" class="error hidden"></div>
+            <button class="btn-primary block" id="submit-suggestion">Send suggestion</button>
           </div>
         </section>
 
@@ -107,6 +124,31 @@
             <button class="chip" data-filter="completed">Done</button>
           </div>
           <div id="admin-reservations" class="reservation-list"></div>
+        </section>
+
+        <!-- ===== ADMIN: GALLERY ===== -->
+        <section class="screen" data-screen="adgallery">
+          <h2 class="section-title">Gallery</h2>
+          <div id="admin-gallery-list" class="gallery-grid"></div>
+          <div class="card form-card">
+            <h3>Add media</h3>
+            <div class="field"><label>Type</label>
+              <select id="new-media-type">
+                <option value="image">Photo</option>
+                <option value="video">Video</option>
+              </select>
+            </div>
+            <div class="field"><label>URL</label><input type="url" id="new-media-url" placeholder="https://... (image, .mp4, or YouTube link)" /></div>
+            <div class="field"><label>Caption</label><input type="text" id="new-media-caption" placeholder="Full Detail · BMW M3" /></div>
+            <button class="btn-primary block" id="add-media">Add to gallery</button>
+          </div>
+        </section>
+
+        <!-- ===== ADMIN: INBOX (SUGGESTIONS) ===== -->
+        <section class="screen" data-screen="inbox">
+          <h2 class="section-title">Suggestions</h2>
+          <div class="stats" id="inbox-stats"></div>
+          <div id="suggestion-list" class="reservation-list"></div>
         </section>
 
         <!-- ===== ADMIN: TEAM ===== -->

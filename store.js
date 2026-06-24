@@ -1,4 +1,4 @@
-/* Brilo Details - data store.
+/* BriloDetails - data store.
  * Works in two modes:
  *   - Cloud mode (Supabase): shared, real-time data across every device.
  *   - Local mode (localStorage): single-device fallback when no keys are set.
@@ -31,11 +31,20 @@
       { id: "r3", name: "Dan W.",    rating: 4, vehicle: "Ford F-150",    text: "Great wash and the tire shine really pops. Would book again.", date: "2026-06-15" },
     ],
     reservations: [],
+    media: [
+      { id: "m1", type: "image", url: "https://picsum.photos/seed/brilo-detail-1/800/500", caption: "Full Detail · Tesla Model 3", createdAt: 1 },
+      { id: "m2", type: "image", url: "https://picsum.photos/seed/brilo-detail-2/800/500", caption: "Interior Refresh · Honda CR-V", createdAt: 2 },
+      { id: "m3", type: "video", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4", caption: "Ceramic coat in action", createdAt: 3 },
+    ],
+    mediaComments: [
+      { id: "mc1", mediaId: "m1", name: "Marcus L.", text: "That shine is unreal!", createdAt: 4 },
+    ],
+    suggestions: [],
   };
 
   /* Single, stable data object the app reads. Arrays are mutated in place so
      existing references (e.g. app's `state`) stay valid across refetches. */
-  const data = { packages: [], detailers: [], reservations: [], reviews: [] };
+  const data = { packages: [], detailers: [], reservations: [], reviews: [], media: [], mediaComments: [], suggestions: [] };
   let onChange = () => {};
   let sb = null;
 
@@ -50,6 +59,12 @@
                           date: r.date, slot: r.slot, notes: r.notes, status: r.status, detailer_id: r.detailerId || null });
   const fromRev = r => ({ id: r.id, name: r.name, rating: r.rating, vehicle: r.vehicle || "", text: r.comment, date: r.date });
   const toRev   = r => ({ id: r.id, name: r.name, rating: r.rating, vehicle: r.vehicle || "", comment: r.text, date: r.date });
+  const fromMedia = m => ({ id: m.id, type: m.type || "image", url: m.url, caption: m.caption || "", createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now() });
+  const toMedia   = m => ({ id: m.id, type: m.type || "image", url: m.url, caption: m.caption || "" });
+  const fromComment = c => ({ id: c.id, mediaId: c.media_id, name: c.name || "", text: c.text, createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now() });
+  const toComment   = c => ({ id: c.id, media_id: c.mediaId, name: c.name || "", text: c.text });
+  const fromSug = s => ({ id: s.id, name: s.name || "", message: s.message, status: s.status || "new", createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now() });
+  const toSug   = s => ({ id: s.id, name: s.name || "", message: s.message, status: s.status || "new" });
 
   function replace(arr, items) { arr.length = 0; items.forEach(i => arr.push(i)); }
   function newId() { return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36); }
@@ -63,6 +78,9 @@
       if (raw) {
         const o = JSON.parse(raw);
         if (!Array.isArray(o.reviews)) o.reviews = JSON.parse(JSON.stringify(seed.reviews));
+        if (!Array.isArray(o.media)) o.media = JSON.parse(JSON.stringify(seed.media));
+        if (!Array.isArray(o.mediaComments)) o.mediaComments = JSON.parse(JSON.stringify(seed.mediaComments));
+        if (!Array.isArray(o.suggestions)) o.suggestions = [];
         return o;
       }
     } catch (e) {}
@@ -71,16 +89,22 @@
 
   /* ---------- cloud helpers ---------- */
   async function refetchAll() {
-    const [pk, dt, rs, rv] = await Promise.all([
+    const [pk, dt, rs, rv, md, mc, sg] = await Promise.all([
       sb.from("packages").select("*").order("price", { ascending: true }),
       sb.from("detailers").select("*").order("name", { ascending: true }),
       sb.from("reservations").select("*").order("created_at", { ascending: false }),
       sb.from("reviews").select("*").order("date", { ascending: false }),
+      sb.from("media").select("*").order("created_at", { ascending: false }),
+      sb.from("media_comments").select("*").order("created_at", { ascending: true }),
+      sb.from("suggestions").select("*").order("created_at", { ascending: false }),
     ]);
     if (pk.data) replace(data.packages, pk.data.map(fromPkg));
     if (dt.data) replace(data.detailers, dt.data.map(fromDet));
     if (rs.data) replace(data.reservations, rs.data.map(fromRes));
     if (rv.data) replace(data.reviews, rv.data.map(fromRev));
+    if (md.data) replace(data.media, md.data.map(fromMedia));
+    if (mc.data) replace(data.mediaComments, mc.data.map(fromComment));
+    if (sg.data) replace(data.suggestions, sg.data.map(fromSug));
   }
   async function cInsert(t, row) { const { error } = await sb.from(t).insert(row); if (error) notify(error.message); }
   async function cUpdate(t, id, patch) { const { error } = await sb.from(t).update(patch).eq("id", id); if (error) notify(error.message); }
@@ -111,7 +135,7 @@
       });
       try { await refetchAll(); } catch (e) { notify(e.message || "load failed"); }
       const chan = sb.channel("brilo-all");
-      ["packages", "detailers", "reservations", "reviews"].forEach(t =>
+      ["packages", "detailers", "reservations", "reviews", "media", "media_comments", "suggestions"].forEach(t =>
         chan.on("postgres_changes", { event: "*", schema: "public", table: t }, async () => {
           try { await refetchAll(); onChange(); } catch (e) { notify(e.message || "sync failed"); }
         }));
@@ -122,6 +146,9 @@
       replace(data.detailers, o.detailers);
       replace(data.reservations, o.reservations);
       replace(data.reviews, o.reviews);
+      replace(data.media, o.media || []);
+      replace(data.mediaComments, o.mediaComments || []);
+      replace(data.suggestions, o.suggestions || []);
     }
     return { cloud: CLOUD };
   }
@@ -148,6 +175,44 @@
       rev.id = rev.id || newId();
       data.reviews.unshift(rev);
       if (CLOUD) cInsert("reviews", toRev(rev)); else saveLocal();
+    },
+
+    addMedia(m) {
+      m.id = m.id || newId();
+      m.createdAt = Date.now();
+      data.media.unshift(m);
+      if (CLOUD) cInsert("media", toMedia(m)); else saveLocal();
+    },
+    removeMedia(id) {
+      const i = data.media.findIndex(x => x.id === id);
+      if (i >= 0) data.media.splice(i, 1);
+      for (let j = data.mediaComments.length - 1; j >= 0; j--)
+        if (data.mediaComments[j].mediaId === id) data.mediaComments.splice(j, 1);
+      if (CLOUD) cDelete("media", id); else saveLocal();
+    },
+    addMediaComment(c) {
+      c.id = c.id || newId();
+      c.createdAt = Date.now();
+      data.mediaComments.push(c);
+      if (CLOUD) cInsert("media_comments", toComment(c)); else saveLocal();
+    },
+
+    addSuggestion(s) {
+      s.id = s.id || newId();
+      s.status = s.status || "new";
+      s.createdAt = Date.now();
+      data.suggestions.unshift(s);
+      if (CLOUD) cInsert("suggestions", toSug(s)); else saveLocal();
+    },
+    updateSuggestion(id, patch) {
+      const s = data.suggestions.find(x => x.id === id); if (!s) return;
+      Object.assign(s, patch);
+      if (CLOUD) cUpdate("suggestions", id, { status: s.status }); else saveLocal();
+    },
+    removeSuggestion(id) {
+      const i = data.suggestions.findIndex(x => x.id === id);
+      if (i >= 0) data.suggestions.splice(i, 1);
+      if (CLOUD) cDelete("suggestions", id); else saveLocal();
     },
 
     addDetailer(d) {
@@ -189,6 +254,9 @@
       replace(data.detailers, s.detailers);
       replace(data.reservations, s.reservations);
       replace(data.reviews, s.reviews);
+      replace(data.media, s.media);
+      replace(data.mediaComments, s.mediaComments);
+      replace(data.suggestions, s.suggestions);
       saveLocal();
       return true;
     },
