@@ -241,6 +241,41 @@ document.getElementById("copy-link").addEventListener("click", async () => {
   catch { const i = document.getElementById("share-url"); i.select(); document.execCommand("copy"); toast("Link copied."); }
 });
 
+/* ---------- per-booking private discussion (customer <-> admin) ---------- */
+function jobNotesFor(rid) {
+  return state.jobNotes.filter(n => n.reservationId === rid).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+}
+function threadHtml(rid) {
+  const notes = jobNotesFor(rid);
+  const body = notes.length
+    ? notes.map(n => `<div class="msg ${n.author === "admin" ? "from-admin" : "from-customer"}">
+        <div class="msg-meta">${n.author === "admin" ? "Admin" : (esc(n.name) || "Customer")}</div>
+        <div class="msg-text">${esc(n.text)}</div></div>`).join("")
+    : `<div class="comment-empty">No notes yet. Only you and the BriloDetails team can see this.</div>`;
+  return `<div class="thread">
+    <div class="thread-title">🔒 Private notes &amp; discussion</div>
+    <div class="thread-body">${body}</div>
+    <div class="comment-form">
+      <input type="text" placeholder="Add a note..." data-ninput="${rid}" maxlength="500" />
+      <button class="btn-primary" data-nsend="${rid}">Send</button>
+    </div>
+  </div>`;
+}
+function wireThreads(container, author, rerenderFn) {
+  container.querySelectorAll("[data-nsend]").forEach(b => b.addEventListener("click", () => {
+    const rid = b.dataset.nsend;
+    const inp = container.querySelector(`[data-ninput="${rid}"]`);
+    const text = inp.value.trim();
+    if (!text) { inp.focus(); return; }
+    const r = state.reservations.find(x => x.id === rid);
+    const name = author === "admin" ? "Admin" : (getProfile()?.name || r?.name || "Customer");
+    Store.addJobNote({ reservationId: rid, author, name, text });
+    inp.value = "";
+    rerenderFn();
+    toast("Note sent.");
+  }));
+}
+
 function renderCustomerReservations() {
   const phone = document.getElementById("lookup-phone").value.trim();
   const list = document.getElementById("cust-reservations");
@@ -267,10 +302,12 @@ function renderCustomerReservations() {
         <div><div class="k">Address</div>${esc(r.address)}</div>
         <div><div class="k">Detailer</div>${r.detailerId ? esc(detailerById(r.detailerId)?.name || "-") : "Not yet assigned"}</div>
       </div>
+      ${threadHtml(r.id)}
       ${canCancel ? `<div class="res-actions"><button class="btn-secondary" data-cancel="${r.id}">Cancel visit</button></div>` : ""}
       ${r.status === "completed" ? `<div class="res-actions"><button class="btn-primary" data-review="${r.id}">Leave a review</button></div>` : ""}`;
     list.appendChild(card);
   });
+  wireThreads(list, "customer", renderCustomerReservations);
   list.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", () => {
     Store.updateReservation(b.dataset.cancel, { status: "cancelled" });
     toast("Visit cancelled."); renderCustomerReservations();
@@ -426,13 +463,31 @@ function renderAdminGallery() {
       div.innerHTML = `
         ${mediaFrameHtml(m)}
         <div class="media-body">
-          <div class="media-caption">${esc(m.caption) || (m.type === "video" ? "Video" : "Photo")}</div>
-          <div class="media-meta">${m.type === "video" ? "🎬 Video" : "🖼 Photo"} · ${cc} comment${cc === 1 ? "" : "s"}</div>
-          <button class="link-btn" data-delmedia="${m.id}" style="text-align:left;width:auto;margin:0;padding:4px 0;">Remove</button>
+          <div class="edit-grid">
+            <div class="field full"><label>Caption</label><input type="text" data-mf="caption" value="${esc(m.caption)}" /></div>
+            <div class="field"><label>Type</label>
+              <select data-mf="type"><option value="image" ${m.type !== "video" ? "selected" : ""}>Photo</option><option value="video" ${m.type === "video" ? "selected" : ""}>Video</option></select>
+            </div>
+            <div class="field"><label>Comments</label><input type="text" value="${cc}" readonly /></div>
+            <div class="field full"><label>URL</label><input type="url" data-mf="url" value="${esc(m.url)}" /></div>
+          </div>
+          <div class="res-actions">
+            <button class="btn-primary" data-savemedia="${m.id}">Save</button>
+            <button class="btn-secondary" data-delmedia="${m.id}">Remove</button>
+          </div>
         </div>`;
       list.appendChild(div);
     });
   }
+  list.querySelectorAll("[data-savemedia]").forEach(b => b.addEventListener("click", () => {
+    const card = b.closest(".media-card");
+    const caption = card.querySelector('[data-mf="caption"]').value.trim();
+    const url = card.querySelector('[data-mf="url"]').value.trim();
+    const type = card.querySelector('[data-mf="type"]').value;
+    if (!url) { toast("URL can't be empty."); return; }
+    Store.updateMedia(b.dataset.savemedia, { caption, url, type });
+    renderAdminGallery(); renderGallery(); toast("Media saved.");
+  }));
   list.querySelectorAll("[data-delmedia]").forEach(b => b.addEventListener("click", () => {
     Store.removeMedia(b.dataset.delmedia);
     renderAdminGallery(); renderGallery(); toast("Media removed.");
@@ -543,13 +598,43 @@ function renderBoard() {
         <div><div class="k">Address</div>${esc(r.address)}</div>
         <div><div class="k">Notes</div>${esc(r.notes) || "-"}</div>
       </div>
+      <div class="edit-grid hidden" data-jobedit="${r.id}">
+        <div class="field"><label>Customer</label><input type="text" data-jf="name" value="${esc(r.name)}" /></div>
+        <div class="field"><label>Phone</label><input type="tel" data-jf="phone" value="${esc(r.phone)}" /></div>
+        <div class="field"><label>Vehicle</label><input type="text" data-jf="vehicle" value="${esc(r.vehicle)}" /></div>
+        <div class="field"><label>Package</label><select data-jf="pkgId">${state.packages.map(pk => `<option value="${pk.id}" ${r.pkgId === pk.id ? "selected" : ""}>${esc(pk.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Date</label><input type="date" data-jf="date" value="${esc(r.date)}" /></div>
+        <div class="field"><label>Time</label><select data-jf="slot">${Object.keys(SLOT_LABELS).map(s => `<option value="${s}" ${r.slot === s ? "selected" : ""}>${SLOT_LABELS[s]}</option>`).join("")}</select></div>
+        <div class="field full"><label>Address</label><input type="text" data-jf="address" value="${esc(r.address)}" /></div>
+        <div class="field full"><label>Notes</label><input type="text" data-jf="notes" value="${esc(r.notes)}" /></div>
+        <div class="field full"><button class="btn-primary block" data-savejob="${r.id}">Save changes</button></div>
+      </div>
       <div class="res-actions">
         <select data-assign="${r.id}"><option value="">Unassigned</option>${opts}</select>
         ${next ? `<button class="btn-primary" data-advance="${r.id}">Mark ${STATUS[next].label}</button>` : ""}
+        <button class="btn-secondary" data-edittoggle="${r.id}">Edit</button>
         ${r.status !== "cancelled" && r.status !== "completed" ? `<button class="btn-secondary" data-admincancel="${r.id}">Cancel</button>` : ""}
-      </div>`;
+      </div>
+      ${threadHtml(r.id)}`;
     list.appendChild(card);
   });
+
+  wireThreads(list, "admin", renderBoard);
+  list.querySelectorAll("[data-edittoggle]").forEach(btn => btn.addEventListener("click", () => {
+    const box = list.querySelector(`[data-jobedit="${btn.dataset.edittoggle}"]`);
+    if (box) { box.classList.toggle("hidden"); btn.textContent = box.classList.contains("hidden") ? "Edit" : "Close"; }
+  }));
+  list.querySelectorAll("[data-savejob]").forEach(btn => btn.addEventListener("click", () => {
+    const box = list.querySelector(`[data-jobedit="${btn.dataset.savejob}"]`);
+    const g = f => box.querySelector(`[data-jf="${f}"]`).value;
+    const name = g("name").trim();
+    if (!name) { toast("Customer name can't be empty."); return; }
+    Store.updateReservation(btn.dataset.savejob, {
+      name, phone: g("phone").trim(), vehicle: g("vehicle").trim(), pkgId: g("pkgId"),
+      address: g("address").trim(), date: g("date"), slot: g("slot"), notes: g("notes").trim(),
+    });
+    renderBoard(); toast("Job updated.");
+  }));
 
   list.querySelectorAll("[data-assign]").forEach(sel => sel.addEventListener("change", () => {
     const r = state.reservations.find(x => x.id === sel.dataset.assign);
@@ -580,11 +665,25 @@ function renderDetailers() {
     const div = document.createElement("div");
     div.className = "pkg-card";
     div.innerHTML = `
-      <div class="pkg-top"><span class="pkg-name">${esc(d.name)}</span><span class="pkg-meta">${active} active job${active === 1 ? "" : "s"}</span></div>
-      <div class="pkg-desc">${esc(d.phone)}</div>
-      <button class="link-btn" data-deldetailer="${d.id}" style="text-align:left;width:auto;margin:0;padding:4px 0;">Remove</button>`;
+      <div class="edit-grid">
+        <div class="field"><label>Name</label><input type="text" data-df="name" value="${esc(d.name)}" /></div>
+        <div class="field"><label>Phone</label><input type="tel" data-df="phone" value="${esc(d.phone)}" /></div>
+      </div>
+      <div class="pkg-meta">${active} active job${active === 1 ? "" : "s"}</div>
+      <div class="res-actions">
+        <button class="btn-primary" data-savedet="${d.id}">Save</button>
+        <button class="btn-secondary" data-deldetailer="${d.id}">Remove</button>
+      </div>`;
     grid.appendChild(div);
   });
+  grid.querySelectorAll("[data-savedet]").forEach(b => b.addEventListener("click", () => {
+    const card = b.closest(".pkg-card");
+    const name = card.querySelector('[data-df="name"]').value.trim();
+    const phone = card.querySelector('[data-df="phone"]').value.trim();
+    if (!name) { toast("Name can't be empty."); return; }
+    Store.updateDetailer(b.dataset.savedet, { name, phone });
+    renderBoard(); toast("Detailer saved.");
+  }));
   grid.querySelectorAll("[data-deldetailer]").forEach(b => b.addEventListener("click", () => {
     Store.removeDetailer(b.dataset.deldetailer);
     renderAdmin(); toast("Detailer removed.");
@@ -608,16 +707,30 @@ function renderPricingEditor() {
     const div = document.createElement("div");
     div.className = "pkg-card";
     div.innerHTML = `
-      <div class="pkg-top"><span class="pkg-name">${esc(p.name)}</span>
-        <span class="pkg-price">$<input type="number" value="${p.price}" min="0" data-price="${p.id}" style="width:84px;display:inline-block;padding:6px 8px;"></span></div>
-      <div class="pkg-desc">${esc(p.desc)}</div>
-      <div class="pkg-meta">~${p.duration} min</div>
-      <button class="link-btn" data-delpkg="${p.id}" style="text-align:left;width:auto;margin:0;padding:4px 0;">Remove package</button>`;
+      <div class="edit-grid">
+        <div class="field full"><label>Name</label><input type="text" data-pf="name" value="${esc(p.name)}" /></div>
+        <div class="field"><label>Price ($)</label><input type="number" min="0" data-pf="price" value="${p.price}" /></div>
+        <div class="field"><label>Duration (min)</label><input type="number" min="15" data-pf="duration" value="${p.duration}" /></div>
+        <div class="field full"><label>Description</label><input type="text" data-pf="desc" value="${esc(p.desc)}" /></div>
+      </div>
+      <div class="res-actions">
+        <button class="btn-primary" data-savepkg="${p.id}">Save</button>
+        <button class="btn-secondary" data-delpkg="${p.id}">Remove</button>
+      </div>`;
     grid.appendChild(div);
   });
-  grid.querySelectorAll("[data-price]").forEach(inp => inp.addEventListener("change", () => {
-    Store.updatePackage(inp.dataset.price, { price: Math.max(0, Number(inp.value) || 0) });
-    renderPackages(); toast("Price updated.");
+  grid.querySelectorAll("[data-savepkg]").forEach(b => b.addEventListener("click", () => {
+    const card = b.closest(".pkg-card");
+    const g = f => card.querySelector(`[data-pf="${f}"]`).value;
+    const name = g("name").trim();
+    if (!name) { toast("Name can't be empty."); return; }
+    Store.updatePackage(b.dataset.savepkg, {
+      name,
+      price: Math.max(0, Number(g("price")) || 0),
+      duration: Math.max(15, Number(g("duration")) || 60),
+      desc: g("desc").trim(),
+    });
+    renderPackages(); toast("Package saved.");
   }));
   grid.querySelectorAll("[data-delpkg]").forEach(b => b.addEventListener("click", () => {
     Store.removePackage(b.dataset.delpkg);

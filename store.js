@@ -40,11 +40,12 @@
       { id: "mc1", mediaId: "m1", name: "Marcus L.", text: "That shine is unreal!", createdAt: 4 },
     ],
     suggestions: [],
+    jobNotes: [],
   };
 
   /* Single, stable data object the app reads. Arrays are mutated in place so
      existing references (e.g. app's `state`) stay valid across refetches. */
-  const data = { packages: [], detailers: [], reservations: [], reviews: [], media: [], mediaComments: [], suggestions: [] };
+  const data = { packages: [], detailers: [], reservations: [], reviews: [], media: [], mediaComments: [], suggestions: [], jobNotes: [] };
   let onChange = () => {};
   let sb = null;
 
@@ -65,6 +66,8 @@
   const toComment   = c => ({ id: c.id, media_id: c.mediaId, name: c.name || "", text: c.text });
   const fromSug = s => ({ id: s.id, name: s.name || "", message: s.message, status: s.status || "new", createdAt: s.created_at ? new Date(s.created_at).getTime() : Date.now() });
   const toSug   = s => ({ id: s.id, name: s.name || "", message: s.message, status: s.status || "new" });
+  const fromNote = n => ({ id: n.id, reservationId: n.reservation_id, author: n.author || "customer", name: n.name || "", text: n.text, createdAt: n.created_at ? new Date(n.created_at).getTime() : Date.now() });
+  const toNote   = n => ({ id: n.id, reservation_id: n.reservationId, author: n.author || "customer", name: n.name || "", text: n.text });
 
   function replace(arr, items) { arr.length = 0; items.forEach(i => arr.push(i)); }
   function newId() { return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36); }
@@ -81,6 +84,7 @@
         if (!Array.isArray(o.media)) o.media = JSON.parse(JSON.stringify(seed.media));
         if (!Array.isArray(o.mediaComments)) o.mediaComments = JSON.parse(JSON.stringify(seed.mediaComments));
         if (!Array.isArray(o.suggestions)) o.suggestions = [];
+        if (!Array.isArray(o.jobNotes)) o.jobNotes = [];
         return o;
       }
     } catch (e) {}
@@ -89,7 +93,7 @@
 
   /* ---------- cloud helpers ---------- */
   async function refetchAll() {
-    const [pk, dt, rs, rv, md, mc, sg] = await Promise.all([
+    const [pk, dt, rs, rv, md, mc, sg, jn] = await Promise.all([
       sb.from("packages").select("*").order("price", { ascending: true }),
       sb.from("detailers").select("*").order("name", { ascending: true }),
       sb.from("reservations").select("*").order("created_at", { ascending: false }),
@@ -97,6 +101,7 @@
       sb.from("media").select("*"),
       sb.from("media_comments").select("*"),
       sb.from("suggestions").select("*"),
+      sb.from("job_notes").select("*"),
     ]);
     if (pk.data) replace(data.packages, pk.data.map(fromPkg));
     if (dt.data) replace(data.detailers, dt.data.map(fromDet));
@@ -105,6 +110,7 @@
     if (md.data) replace(data.media, md.data.map(fromMedia));
     if (mc.data) replace(data.mediaComments, mc.data.map(fromComment));
     if (sg.data) replace(data.suggestions, sg.data.map(fromSug));
+    if (jn.data) replace(data.jobNotes, jn.data.map(fromNote));
   }
   async function cInsert(t, row) { const { error } = await sb.from(t).insert(row); if (error) notify(error.message); }
   async function cUpdate(t, id, patch) { const { error } = await sb.from(t).update(patch).eq("id", id); if (error) notify(error.message); }
@@ -115,6 +121,13 @@
     if ("status" in p) o.status = p.status;
     if ("detailerId" in p) o.detailer_id = p.detailerId || null;
     if ("notes" in p) o.notes = p.notes;
+    if ("name" in p) o.name = p.name;
+    if ("phone" in p) o.phone = p.phone;
+    if ("vehicle" in p) o.vehicle = p.vehicle;
+    if ("address" in p) o.address = p.address;
+    if ("date" in p) o.date = p.date;
+    if ("slot" in p) o.slot = p.slot;
+    if ("pkgId" in p) o.pkg_id = p.pkgId;
     return o;
   }
   function pkgPatch(p) {
@@ -135,7 +148,7 @@
       });
       try { await refetchAll(); } catch (e) { notify(e.message || "load failed"); }
       const chan = sb.channel("brilo-all");
-      ["packages", "detailers", "reservations", "reviews", "media", "media_comments", "suggestions"].forEach(t =>
+      ["packages", "detailers", "reservations", "reviews", "media", "media_comments", "suggestions", "job_notes"].forEach(t =>
         chan.on("postgres_changes", { event: "*", schema: "public", table: t }, async () => {
           try { await refetchAll(); onChange(); } catch (e) { notify(e.message || "sync failed"); }
         }));
@@ -149,6 +162,7 @@
       replace(data.media, o.media || []);
       replace(data.mediaComments, o.mediaComments || []);
       replace(data.suggestions, o.suggestions || []);
+      replace(data.jobNotes, o.jobNotes || []);
     }
     return { cloud: CLOUD };
   }
@@ -171,6 +185,14 @@
       if (CLOUD) cUpdate("reservations", id, resPatch(patch)); else saveLocal();
     },
 
+    addJobNote(n) {
+      n.id = n.id || newId();
+      n.author = n.author || "customer";
+      n.createdAt = Date.now();
+      data.jobNotes.push(n);
+      if (CLOUD) cInsert("job_notes", toNote(n)); else saveLocal();
+    },
+
     addReview(rev) {
       rev.id = rev.id || newId();
       data.reviews.unshift(rev);
@@ -182,6 +204,11 @@
       m.createdAt = Date.now();
       data.media.unshift(m);
       if (CLOUD) cInsert("media", toMedia(m)); else saveLocal();
+    },
+    updateMedia(id, patch) {
+      const m = data.media.find(x => x.id === id); if (!m) return;
+      Object.assign(m, patch);
+      if (CLOUD) cUpdate("media", id, { caption: m.caption || "", url: m.url, type: m.type || "image" }); else saveLocal();
     },
     removeMedia(id) {
       const i = data.media.findIndex(x => x.id === id);
@@ -220,6 +247,11 @@
       data.detailers.push(d);
       if (CLOUD) cInsert("detailers", { id: d.id, name: d.name, phone: d.phone || "" }); else saveLocal();
     },
+    updateDetailer(id, patch) {
+      const d = data.detailers.find(x => x.id === id); if (!d) return;
+      Object.assign(d, patch);
+      if (CLOUD) cUpdate("detailers", id, { name: d.name, phone: d.phone || "" }); else saveLocal();
+    },
     removeDetailer(id) {
       const i = data.detailers.findIndex(d => d.id === id);
       if (i >= 0) data.detailers.splice(i, 1);
@@ -257,6 +289,7 @@
       replace(data.media, s.media);
       replace(data.mediaComments, s.mediaComments);
       replace(data.suggestions, s.suggestions);
+      replace(data.jobNotes, s.jobNotes || []);
       saveLocal();
       return true;
     },
