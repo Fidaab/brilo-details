@@ -94,9 +94,9 @@
       sb.from("detailers").select("*").order("name", { ascending: true }),
       sb.from("reservations").select("*").order("created_at", { ascending: false }),
       sb.from("reviews").select("*").order("date", { ascending: false }),
-      sb.from("media").select("*").order("created_at", { ascending: false }),
-      sb.from("media_comments").select("*").order("created_at", { ascending: true }),
-      sb.from("suggestions").select("*").order("created_at", { ascending: false }),
+      sb.from("media").select("*"),
+      sb.from("media_comments").select("*"),
+      sb.from("suggestions").select("*"),
     ]);
     if (pk.data) replace(data.packages, pk.data.map(fromPkg));
     if (dt.data) replace(data.detailers, dt.data.map(fromDet));
