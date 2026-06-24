@@ -48,6 +48,8 @@
   const data = { packages: [], detailers: [], reservations: [], reviews: [], media: [], mediaComments: [], suggestions: [], jobNotes: [] };
   let onChange = () => {};
   let sb = null;
+  let adminAuthed = false;
+  let authCb = null;
 
   /* ---------- row <-> app object mapping ---------- */
   const fromPkg = p => ({ id: p.id, name: p.name, price: Number(p.price), duration: p.duration, desc: p.description || "" });
@@ -149,6 +151,13 @@
       sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
         realtime: { params: { eventsPerSecond: 5 } },
       });
+      try { const { data: s } = await sb.auth.getSession(); adminAuthed = !!s.session; } catch (e) {}
+      sb.auth.onAuthStateChange(async (_event, session) => {
+        adminAuthed = !!session;
+        try { await refetchAll(); } catch (e) {}
+        onChange();
+        if (authCb) authCb(adminAuthed);
+      });
       try { await refetchAll(); } catch (e) { notify(e.message || "load failed"); }
       const chan = sb.channel("brilo-all");
       ["packages", "detailers", "reservations", "reviews", "media", "media_comments", "suggestions", "job_notes"].forEach(t =>
@@ -175,6 +184,19 @@
     init,
     newId,
     isCloud: () => CLOUD,
+
+    /* ---------- admin auth (Supabase Auth) ---------- */
+    isAdminAuthed: () => CLOUD ? adminAuthed : true,
+    onAuthChange(cb) { authCb = cb; },
+    async signInAdmin(email, password) {
+      if (!CLOUD) { adminAuthed = true; return { ok: true }; }
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      return { ok: !error, error: error && error.message };
+    },
+    async signOutAdmin() {
+      if (!CLOUD) { adminAuthed = false; return; }
+      await sb.auth.signOut();
+    },
 
     addReservation(r) {
       r.id = r.id || newId();

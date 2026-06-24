@@ -232,6 +232,20 @@ textarea { resize: vertical; }
   font-size: 14px; z-index: 50; max-width: 90%; text-align: center;
 }
 
+/* Modal */
+.modal {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(7, 4, 14, .72); backdrop-filter: blur(4px);
+}
+.modal-card {
+  width: 100%; max-width: 360px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+  padding: 22px; box-shadow: var(--shadow);
+}
+.modal-card h3 { margin: 0 0 6px; font-size: 18px; }
+.modal-card .link-btn { margin-top: 6px; }
+
 /* Form hint */
 .form-hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; }
 

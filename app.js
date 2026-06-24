@@ -109,8 +109,20 @@ function signOut() { try { localStorage.removeItem(PROFILE_KEY); } catch {} }
 
 function renderProfileBar() {
   const bar = document.getElementById("profile-bar");
+  if (currentRole === "admin") {
+    if (Store.isAdminAuthed()) {
+      bar.classList.remove("hidden");
+      bar.innerHTML = `<span class="who">🔧 <span class="accent">Admin</span></span><button class="switch" id="admin-logout">Log out</button>`;
+      document.getElementById("admin-logout").addEventListener("click", async () => {
+        await Store.signOutAdmin();
+        setRole("customer");
+        toast("Logged out.");
+      });
+    } else { bar.classList.add("hidden"); bar.innerHTML = ""; }
+    return;
+  }
   const p = getProfile();
-  if (currentRole !== "customer" || !p) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
+  if (!p) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
   bar.classList.remove("hidden");
   bar.innerHTML = `<span class="who">👋 Hi, <span class="accent">${esc(p.name)}</span></span><button class="switch" id="switch-acct">Switch</button>`;
   document.getElementById("switch-acct").addEventListener("click", () => {
@@ -146,16 +158,50 @@ function renderVisitsScreen() {
   renderCustomerReservations();
 }
 
+function setRole(role) {
+  document.querySelectorAll(".role-opt").forEach(b => b.classList.toggle("active", b.dataset.role === role));
+  currentRole = role;
+  buildNav();
+  renderProfileBar();
+  if (role === "admin") renderAdmin();
+}
+
+function openAdminLogin() {
+  document.getElementById("admin-login-error").classList.add("hidden");
+  document.getElementById("admin-login").classList.remove("hidden");
+  document.getElementById("admin-email").focus();
+}
+function closeAdminLogin() {
+  document.getElementById("admin-login").classList.add("hidden");
+  document.getElementById("admin-password").value = "";
+  // keep the visible toggle on whatever role is actually active
+  document.querySelectorAll(".role-opt").forEach(b => b.classList.toggle("active", b.dataset.role === currentRole));
+}
+
 document.querySelectorAll(".role-opt").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".role-opt").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentRole = btn.dataset.role;
-    buildNav();
-    renderProfileBar();
-    if (currentRole === "admin") renderAdmin();
+    const role = btn.dataset.role;
+    if (role === "admin" && !Store.isAdminAuthed()) { openAdminLogin(); return; }
+    setRole(role);
   });
 });
+
+document.getElementById("admin-login-btn").addEventListener("click", async () => {
+  const err = document.getElementById("admin-login-error");
+  const email = document.getElementById("admin-email").value.trim();
+  const password = document.getElementById("admin-password").value;
+  if (!email || !password) return showErr(err, "Enter your email and password.");
+  const btn = document.getElementById("admin-login-btn");
+  btn.disabled = true; btn.textContent = "Signing in...";
+  const res = await Store.signInAdmin(email, password);
+  btn.disabled = false; btn.textContent = "Sign in";
+  if (!res.ok) return showErr(err, res.error || "Sign in failed.");
+  closeAdminLogin();
+  setRole("admin");
+  toast("Signed in as admin.");
+});
+document.getElementById("admin-password").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("admin-login-btn").click(); });
+document.getElementById("admin-login-cancel").addEventListener("click", closeAdminLogin);
 
 document.querySelectorAll("[data-back]").forEach(b => b.addEventListener("click", () => showScreen(b.dataset.back)));
 
@@ -775,6 +821,14 @@ function rerender() {
 
 /* ---------- init ---------- */
 document.getElementById("cust-reservations").innerHTML = `<div class="empty">Enter your phone number to see your visits.</div>`;
+
+Store.onAuthChange(() => {
+  renderProfileBar();
+  if (currentRole === "admin") {
+    if (Store.isAdminAuthed()) renderAdmin();
+    else setRole("customer");
+  }
+});
 
 Store.init(rerender).then(({ cloud }) => {
   state = Store.data;
