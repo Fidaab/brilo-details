@@ -4,6 +4,6 @@
  * the app runs in local mode (data stays on this device).
  */
 window.BRILO_CONFIG = {
-  supabaseUrl: "YOUR_SUPABASE_URL",
-  supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY"
+  supabaseUrl: "https://ziqczztzdxitrpteiumb.supabase.co",
+  supabaseAnonKey: "sb_publishable_79uCiVtA1_fNVbtQNQXE1A_zRQXCObT"
 };
