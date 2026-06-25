@@ -867,3 +867,48 @@ if ("serviceWorker" in navigator) {
 if (navigator.storage && navigator.storage.persist) {
   navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist().catch(() => {}); }).catch(() => {});
 }
+
+/* ---------- one-time "Add to Home Screen" hint ----------
+   Installed PWAs stay signed in and get durable storage. On Chromium we trigger
+   the native install prompt; on iOS Safari (no install API) we show the manual
+   Share -> Add to Home Screen steps. Shown once, then dismissed for good. */
+(function () {
+  const KEY = "brilo.installHintDismissed";
+  const hint = document.getElementById("install-hint");
+  const body = document.getElementById("install-body");
+  const closeBtn = document.getElementById("install-close");
+  if (!hint || !body || !closeBtn) return;
+
+  const isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(KEY) === "1"; } catch {}
+  if (isStandalone || dismissed) return;
+
+  function dismiss() { hint.classList.add("hidden"); try { localStorage.setItem(KEY, "1"); } catch {} }
+  closeBtn.addEventListener("click", dismiss);
+
+  const ua = window.navigator.userAgent || "";
+  const isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    body.innerHTML = `<span class="install-text">📲 Install BriloDetails for one-tap access and to stay signed in.</span>` +
+      `<button class="btn-primary install-btn" id="install-go">Install</button>`;
+    hint.classList.remove("hidden");
+    const go = document.getElementById("install-go");
+    if (go) go.addEventListener("click", async () => {
+      hint.classList.add("hidden");
+      try { deferredPrompt.prompt(); await deferredPrompt.userChoice; } catch {}
+      deferredPrompt = null;
+      try { localStorage.setItem(KEY, "1"); } catch {}
+    });
+  });
+  window.addEventListener("appinstalled", dismiss);
+
+  if (isIOS) {
+    body.innerHTML = `<span class="install-text">📲 Add BriloDetails to your Home Screen to stay signed in: tap <b>Share</b>, then <b>Add to Home Screen</b>.</span>`;
+    hint.classList.remove("hidden");
+  }
+})();

@@ -250,6 +250,11 @@ textarea { resize: vertical; }
 .form-hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; }
 .remember-row { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--text); font-size: 14px; cursor: pointer; user-select: none; }
 .remember-row input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.install-hint { position: relative; display: flex; align-items: center; gap: 10px; margin: 4px 16px 8px; padding: 11px 38px 11px 13px; background: rgba(168,85,247,0.12); border: 1px solid rgba(168,85,247,0.35); border-radius: 12px; }
+.install-body { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap; }
+.install-text { color: var(--text); font-size: 13px; line-height: 1.45; }
+.install-btn { padding: 8px 14px; font-size: 13px; }
+.install-close { position: absolute; top: 6px; right: 9px; background: none; border: none; color: var(--muted); font-size: 21px; line-height: 1; cursor: pointer; padding: 0; }
 
 /* Profile bar */
 .profile-bar {
