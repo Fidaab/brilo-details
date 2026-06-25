@@ -41,11 +41,13 @@
     ],
     suggestions: [],
     jobNotes: [],
+    maintenanceReminders: [],
+    maintenancePlans: [],
   };
 
   /* Single, stable data object the app reads. Arrays are mutated in place so
      existing references (e.g. app's `state`) stay valid across refetches. */
-  const data = { packages: [], detailers: [], reservations: [], reviews: [], media: [], mediaComments: [], suggestions: [], jobNotes: [] };
+  const data = { packages: [], detailers: [], reservations: [], reviews: [], media: [], mediaComments: [], suggestions: [], jobNotes: [], maintenanceReminders: [], maintenancePlans: [] };
   let onChange = () => {};
   let sb = null;
   let adminAuthed = false;
@@ -70,6 +72,10 @@
   const toSug   = s => ({ id: s.id, name: s.name || "", message: s.message, status: s.status || "new" });
   const fromNote = n => ({ id: n.id, reservationId: n.reservation_id, author: n.author || "customer", name: n.name || "", text: n.text, createdAt: n.created_at ? new Date(n.created_at).getTime() : Date.now() });
   const toNote   = n => ({ id: n.id, reservation_id: n.reservationId, author: n.author || "customer", name: n.name || "", text: n.text });
+  const fromRem = r => ({ id: r.id, phone: r.phone, name: r.name || "", vehicle: r.vehicle || "", message: r.message, pkgId: r.pkg_id, status: r.status || "sent", createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now() });
+  const toRem   = r => ({ id: r.id, phone: r.phone, name: r.name || "", vehicle: r.vehicle || "", message: r.message, pkg_id: r.pkgId || null, status: r.status || "sent" });
+  const fromPlan = p => ({ id: p.id, phone: p.phone, name: p.name || "", vehicle: p.vehicle || "", pkgId: p.pkg_id, intervalWeeks: p.interval_weeks || 4, nextDue: p.next_due || null, active: p.active !== false, createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now() });
+  const toPlan   = p => ({ id: p.id, phone: p.phone, name: p.name || "", vehicle: p.vehicle || "", pkg_id: p.pkgId || null, interval_weeks: p.intervalWeeks || 4, next_due: p.nextDue || null, active: p.active !== false });
 
   function replace(arr, items) { arr.length = 0; items.forEach(i => arr.push(i)); }
   function newId() { return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36); }
@@ -87,6 +93,8 @@
         if (!Array.isArray(o.mediaComments)) o.mediaComments = JSON.parse(JSON.stringify(seed.mediaComments));
         if (!Array.isArray(o.suggestions)) o.suggestions = [];
         if (!Array.isArray(o.jobNotes)) o.jobNotes = [];
+        if (!Array.isArray(o.maintenanceReminders)) o.maintenanceReminders = [];
+        if (!Array.isArray(o.maintenancePlans)) o.maintenancePlans = [];
         return o;
       }
     } catch (e) {}
@@ -98,7 +106,7 @@
      can return incomplete rows on recently-created tables (stale "*" expansion
      in the schema cache), which silently drops data. Explicit columns are reliable. */
   async function refetchAll() {
-    const [pk, dt, rs, rv, md, mc, sg, jn] = await Promise.all([
+    const [pk, dt, rs, rv, md, mc, sg, jn, mr, mp] = await Promise.all([
       sb.from("packages").select("id,name,price,duration,description").order("price", { ascending: true }),
       sb.from("detailers").select("id,name,phone").order("name", { ascending: true }),
       sb.from("reservations").select("id,pkg_id,name,phone,vehicle,address,date,slot,notes,status,detailer_id,created_at"),
@@ -107,6 +115,8 @@
       sb.from("media_comments").select("id,media_id,name,text,created_at"),
       sb.from("suggestions").select("id,name,message,status,created_at"),
       sb.from("job_notes").select("id,reservation_id,author,name,text,created_at"),
+      sb.from("maintenance_reminders").select("id,phone,name,vehicle,message,pkg_id,status,created_at"),
+      sb.from("maintenance_plans").select("id,phone,name,vehicle,pkg_id,interval_weeks,next_due,active,created_at"),
     ]);
     if (pk.data) replace(data.packages, pk.data.map(fromPkg));
     if (dt.data) replace(data.detailers, dt.data.map(fromDet));
@@ -116,6 +126,8 @@
     if (mc.data) replace(data.mediaComments, mc.data.map(fromComment));
     if (sg.data) replace(data.suggestions, sg.data.map(fromSug));
     if (jn.data) replace(data.jobNotes, jn.data.map(fromNote));
+    if (mr.data) replace(data.maintenanceReminders, mr.data.map(fromRem));
+    if (mp.data) replace(data.maintenancePlans, mp.data.map(fromPlan));
   }
   /* A write that affects 0 rows with no error means RLS silently rejected it
      (PostgREST returns 200 + []). For admin actions that almost always means the
@@ -131,13 +143,11 @@
     if (error) notify(error.message);
   }
   async function cUpdate(t, id, patch) {
-    if (CLOUD && !adminAuthed) return blocked();
     const { data, error } = await sb.from(t).update(patch).eq("id", id).select();
     if (error) return notify(error.message);
     if (!data || data.length === 0) blocked();
   }
   async function cDelete(t, id) {
-    if (CLOUD && !adminAuthed) return blocked();
     const { data, error } = await sb.from(t).delete().eq("id", id).select();
     if (error) return notify(error.message);
     if (!data || data.length === 0) blocked();
@@ -182,7 +192,7 @@
       });
       try { await refetchAll(); } catch (e) { notify(e.message || "load failed"); }
       const chan = sb.channel("brilo-all");
-      ["packages", "detailers", "reservations", "reviews", "media", "media_comments", "suggestions", "job_notes"].forEach(t =>
+      ["packages", "detailers", "reservations", "reviews", "media", "media_comments", "suggestions", "job_notes", "maintenance_reminders", "maintenance_plans"].forEach(t =>
         chan.on("postgres_changes", { event: "*", schema: "public", table: t }, async () => {
           try { await refetchAll(); onChange(); } catch (e) { notify(e.message || "sync failed"); }
         }));
@@ -197,6 +207,8 @@
       replace(data.mediaComments, o.mediaComments || []);
       replace(data.suggestions, o.suggestions || []);
       replace(data.jobNotes, o.jobNotes || []);
+      replace(data.maintenanceReminders, o.maintenanceReminders || []);
+      replace(data.maintenancePlans, o.maintenancePlans || []);
     }
     return { cloud: CLOUD };
   }
@@ -238,6 +250,60 @@
       n.createdAt = Date.now();
       data.jobNotes.push(n);
       if (CLOUD) cInsert("job_notes", toNote(n)); else saveLocal();
+    },
+
+    /* ---------- maintenance: reminders (admin -> customer) ---------- */
+    addMaintenanceReminder(m) {
+      m.id = m.id || newId();
+      m.status = m.status || "sent";
+      m.createdAt = Date.now();
+      data.maintenanceReminders.unshift(m);
+      if (CLOUD) cInsert("maintenance_reminders", toRem(m), true); else saveLocal();
+    },
+    updateMaintenanceReminder(id, patch) {
+      const m = data.maintenanceReminders.find(x => x.id === id); if (!m) return;
+      Object.assign(m, patch);
+      if (CLOUD) cUpdate("maintenance_reminders", id, { status: m.status }); else saveLocal();
+    },
+    removeMaintenanceReminder(id) {
+      const i = data.maintenanceReminders.findIndex(x => x.id === id);
+      if (i >= 0) data.maintenanceReminders.splice(i, 1);
+      if (CLOUD) cDelete("maintenance_reminders", id); else saveLocal();
+    },
+
+    /* ---------- maintenance: plans (customer self-enroll) ---------- */
+    addMaintenancePlan(p) {
+      p.id = p.id || newId();
+      p.active = p.active !== false;
+      p.createdAt = Date.now();
+      data.maintenancePlans.unshift(p);
+      if (CLOUD) cInsert("maintenance_plans", toPlan(p)); else saveLocal();
+    },
+    updateMaintenancePlan(id, patch) {
+      const p = data.maintenancePlans.find(x => x.id === id); if (!p) return;
+      Object.assign(p, patch);
+      if (CLOUD) cUpdate("maintenance_plans", id, toPlan(p)); else saveLocal();
+    },
+    removeMaintenancePlan(id) {
+      const i = data.maintenancePlans.findIndex(x => x.id === id);
+      if (i >= 0) data.maintenancePlans.splice(i, 1);
+      if (CLOUD) cDelete("maintenance_plans", id); else saveLocal();
+    },
+
+    /* ---------- gallery: upload a file from the device ----------
+       Returns { url, type } on success or { error } on failure. Requires the
+       admin to be signed in (Storage write is restricted to authenticated). */
+    async uploadFile(file) {
+      if (!CLOUD) {
+        try { const url = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+          return { url, type: file.type.startsWith("video") ? "video" : "image" }; } catch (e) { return { error: "Could not read file." }; }
+      }
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const path = `media/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await sb.storage.from("gallery").upload(path, file, { contentType: file.type, upsert: false });
+      if (error) return { error: error.message };
+      const { data: pub } = sb.storage.from("gallery").getPublicUrl(path);
+      return { url: pub.publicUrl, type: file.type.startsWith("video") ? "video" : "image" };
     },
 
     addReview(rev) {

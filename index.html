@@ -93,6 +93,7 @@
             <input type="tel" id="lookup-phone" placeholder="Your phone number" />
             <button class="btn-primary" id="lookup-btn">Find</button>
           </div>
+          <div id="cust-care"></div>
           <div id="cust-reservations" class="reservation-list"></div>
         </section>
 
@@ -149,13 +150,15 @@
           <div id="admin-gallery-list" class="gallery-grid"></div>
           <div class="card form-card">
             <h3>Add media</h3>
+            <p class="form-hint">Upload a photo or video from your phone, or paste a URL (e.g. a YouTube link).</p>
+            <div class="field"><label>Upload from device</label><input type="file" id="new-media-file" accept="image/*,video/*" /></div>
             <div class="field"><label>Type</label>
               <select id="new-media-type">
                 <option value="image">Photo</option>
                 <option value="video">Video</option>
               </select>
             </div>
-            <div class="field"><label>URL</label><input type="url" id="new-media-url" placeholder="https://... (image, .mp4, or YouTube link)" /></div>
+            <div class="field"><label>Or paste a URL (optional)</label><input type="url" id="new-media-url" placeholder="https://... (image, .mp4, or YouTube link)" /></div>
             <div class="field"><label>Caption</label><input type="text" id="new-media-caption" placeholder="Full Detail · BMW M3" /></div>
             <button class="btn-primary block" id="add-media">Add to gallery</button>
           </div>
@@ -202,6 +205,26 @@
               <button class="btn-secondary" id="copy-link">Copy</button>
             </div>
           </div>
+        </section>
+
+        <!-- ===== ADMIN: MAINTENANCE ===== -->
+        <section class="screen" data-screen="maintenance">
+          <h2 class="section-title">Maintenance</h2>
+          <div class="card form-card">
+            <h3>Send a reminder</h3>
+            <p class="form-hint">Nudge a customer that their car is due for a detail. They'll see it in My Visits.</p>
+            <div class="field"><label>Customer phone</label><input type="tel" id="rem-phone" placeholder="Their phone number" /></div>
+            <div class="field"><label>Customer name (optional)</label><input type="text" id="rem-name" placeholder="Jane Doe" /></div>
+            <div class="field"><label>Vehicle (optional)</label><input type="text" id="rem-vehicle" placeholder="2021 Honda Civic" /></div>
+            <div class="field"><label>Recommended package</label><select id="rem-pkg"></select></div>
+            <div class="field"><label>Message</label><textarea id="rem-message" rows="2" placeholder="Time for your next detail! Book whenever works for you."></textarea></div>
+            <div id="reminder-error" class="error hidden"></div>
+            <button class="btn-primary block" id="send-reminder">Send reminder</button>
+          </div>
+          <h3 class="sub-title">Sent reminders</h3>
+          <div id="admin-reminders-list" class="reservation-list"></div>
+          <h3 class="sub-title">Maintenance plans</h3>
+          <div id="admin-plans-list" class="reservation-list"></div>
         </section>
 
       </main>

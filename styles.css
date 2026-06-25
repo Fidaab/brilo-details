@@ -217,12 +217,18 @@ textarea { resize: vertical; }
   backdrop-filter: blur(8px);
 }
 .nav-item {
-  flex: 1; background: none; border: none; cursor: pointer;
+  flex: 1; min-width: 0; background: none; border: none; cursor: pointer; position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 9px 4px; color: var(--muted); font-size: 11px; font-weight: 600;
+  padding: 9px 2px; color: var(--muted); font-size: 10.5px; font-weight: 600; white-space: nowrap;
 }
-.nav-item .nav-ico { font-size: 20px; line-height: 1; }
+.nav-item .nav-ico { font-size: 19px; line-height: 1; }
 .nav-item.active { color: var(--accent); }
+.nav-badge {
+  position: absolute; top: 4px; right: calc(50% - 22px);
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
 
 /* Toast */
 .toast {
@@ -255,6 +261,14 @@ textarea { resize: vertical; }
 .install-text { color: var(--text); font-size: 13px; line-height: 1.45; }
 .install-btn { padding: 8px 14px; font-size: 13px; }
 .install-close { position: absolute; top: 6px; right: 9px; background: none; border: none; color: var(--muted); font-size: 21px; line-height: 1; cursor: pointer; padding: 0; }
+.sub-title { margin: 18px 2px 8px; font-size: 15px; font-weight: 700; color: var(--text); }
+.care-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.care-card.due { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.care-card.enroll { background: rgba(168,85,247,0.08); }
+.care-top { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); margin-bottom: 6px; }
+.care-ico { font-size: 18px; }
+.care-msg { color: var(--muted); font-size: 13px; line-height: 1.45; margin-bottom: 8px; }
+.care-pkg { color: var(--text); font-size: 13px; margin-bottom: 8px; }
 
 /* Profile bar */
 .profile-bar {

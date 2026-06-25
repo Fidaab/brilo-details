@@ -23,6 +23,7 @@ const NAV = {
   admin: [
     { screen: "jobs",     ico: "🧽", label: "Jobs" },
     { screen: "adgallery",ico: "🎬", label: "Gallery" },
+    { screen: "maintenance", ico: "🔔", label: "Care" },
     { screen: "inbox",    ico: "💬", label: "Inbox" },
     { screen: "team",     ico: "👥", label: "Team" },
     { screen: "pricing",  ico: "💲", label: "Pricing" },
@@ -48,6 +49,13 @@ function nextWeekdayISO() {
   while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return d.toISOString().slice(0, 10);
 }
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function addWeeksISO(fromISO, weeks) {
+  const d = fromISO ? new Date(fromISO + "T00:00:00") : new Date();
+  d.setDate(d.getDate() + weeks * 7);
+  return d.toISOString().slice(0, 10);
+}
+function careWeeksLabel(w) { return w === 4 ? "Monthly" : w === 8 ? "Every 2 months" : w === 12 ? "Quarterly" : ("Every " + w + " weeks"); }
 
 function arrivalText(r) {
   const start = SLOT_LABELS[r.slot] || r.slot;
@@ -97,7 +105,7 @@ function renderForScreen(screen) {
     case "reviews": renderReviews(); prefillIdentity(); break;
     case "gallery": renderGallery(); break;
     case "visits": renderVisitsScreen(); break;
-    case "jobs": case "team": case "pricing": case "adgallery": case "inbox": renderAdmin(); break;
+    case "jobs": case "team": case "pricing": case "adgallery": case "inbox": case "maintenance": renderAdmin(); break;
   }
 }
 
@@ -171,6 +179,8 @@ function renderVisitsScreen() {
     lookupRow.classList.remove("hidden");
   }
   renderCustomerReservations();
+  renderCustomerCare();
+  updateCareBadge();
 }
 
 function setRole(role) {
@@ -236,9 +246,10 @@ function renderPackages() {
   });
 }
 
-function openBooking(pkgId) {
-  selectedPkgId = pkgId;
-  const p = pkgById(pkgId);
+function openBooking(pkgId, opts = {}) {
+  const p = pkgById(pkgId) || state.packages[0];
+  if (!p) { toast("No packages available yet."); return; }
+  selectedPkgId = p.id;
   document.getElementById("selected-pkg-name").textContent = p.name;
   document.getElementById("selected-pkg-price").textContent = "$" + p.price;
   const me = getProfile();
@@ -246,6 +257,7 @@ function openBooking(pkgId) {
     if (!document.getElementById("cust-name").value) document.getElementById("cust-name").value = me.name || "";
     if (!document.getElementById("cust-phone").value) document.getElementById("cust-phone").value = me.phone || "";
   }
+  if (opts.vehicle && !document.getElementById("cust-vehicle").value) document.getElementById("cust-vehicle").value = opts.vehicle;
   const dateInput = document.getElementById("cust-date");
   dateInput.min = nextWeekdayISO();
   dateInput.value = nextWeekdayISO();
@@ -556,12 +568,24 @@ function renderAdminGallery() {
   }));
 }
 
-document.getElementById("add-media").addEventListener("click", () => {
-  const type = document.getElementById("new-media-type").value;
-  const url = document.getElementById("new-media-url").value.trim();
+document.getElementById("add-media").addEventListener("click", async () => {
+  const btn = document.getElementById("add-media");
+  const fileInput = document.getElementById("new-media-file");
   const caption = document.getElementById("new-media-caption").value.trim();
-  if (!url) { toast("Enter a media URL."); return; }
+  let type = document.getElementById("new-media-type").value;
+  let url = document.getElementById("new-media-url").value.trim();
+  const file = fileInput.files && fileInput.files[0];
+  if (!file && !url) { toast("Choose a file or paste a URL."); return; }
+  if (file) {
+    if (Store.isCloud() && !Store.isAdminAuthed()) { toast("Log in as admin to upload."); return; }
+    btn.disabled = true; btn.textContent = "Uploading...";
+    const res = await Store.uploadFile(file);
+    btn.disabled = false; btn.textContent = "Add to gallery";
+    if (res.error) { toast("Upload failed: " + res.error); return; }
+    url = res.url; type = res.type;
+  }
   Store.addMedia({ type, url, caption });
+  fileInput.value = "";
   document.getElementById("new-media-url").value = "";
   document.getElementById("new-media-caption").value = "";
   renderAdminGallery(); renderGallery(); toast("Media added.");
@@ -619,7 +643,7 @@ document.getElementById("submit-suggestion").addEventListener("click", () => {
 });
 
 /* ---------- admin ---------- */
-function renderAdmin() { renderBoard(); renderDetailers(); renderPricingEditor(); renderAdminGallery(); renderSuggestions(); }
+function renderAdmin() { renderBoard(); renderDetailers(); renderPricingEditor(); renderAdminGallery(); renderSuggestions(); renderMaintenanceAdmin(); }
 
 document.querySelectorAll("#filter-row .chip").forEach(chip => {
   chip.addEventListener("click", () => {
@@ -821,6 +845,184 @@ document.getElementById("reset-data").addEventListener("click", () => {
   }
 });
 
+/* ---------- maintenance: customer view (My Visits) ---------- */
+function renderCustomerCare() {
+  const wrap = document.getElementById("cust-care");
+  if (!wrap) return;
+  const phone = (document.getElementById("lookup-phone").value || "").trim();
+  if (!phone) { wrap.innerHTML = ""; return; }
+
+  let html = "";
+  const rems = state.maintenanceReminders.filter(r => r.phone === phone && r.status === "sent");
+  rems.forEach(r => {
+    const p = pkgById(r.pkgId);
+    html += `<div class="care-card reminder">
+      <div class="care-top"><span class="care-ico">🔔</span><strong>Maintenance reminder</strong></div>
+      <div class="care-msg">${esc(r.message)}</div>
+      ${p ? `<div class="care-pkg">Recommended: <b>${esc(p.name)}</b> · $${p.price}</div>` : ""}
+      <div class="res-actions">
+        <button class="btn-primary" data-rem-book="${r.id}">Schedule</button>
+        <button class="btn-secondary" data-rem-dismiss="${r.id}">Dismiss</button>
+      </div></div>`;
+  });
+
+  const plans = state.maintenancePlans.filter(pl => pl.phone === phone && pl.active);
+  plans.forEach(pl => {
+    const p = pkgById(pl.pkgId);
+    const due = pl.nextDue && pl.nextDue <= todayISO();
+    html += `<div class="care-card plan${due ? " due" : ""}">
+      <div class="care-top"><span class="care-ico">${due ? "⏰" : "🗓️"}</span><strong>${due ? "Maintenance due" : "Maintenance plan"}</strong></div>
+      <div class="care-pkg">${p ? esc(p.name) : "Detail"} · ${careWeeksLabel(pl.intervalWeeks)}</div>
+      <div class="care-msg">${due ? "Your car is due for a detail." : "Next reminder: " + (pl.nextDue ? fmtDate(pl.nextDue) : "-")}</div>
+      <div class="res-actions">
+        ${due ? `<button class="btn-primary" data-plan-book="${pl.id}">Book now</button><button class="btn-secondary" data-plan-snooze="${pl.id}">Snooze 1 week</button>` : ""}
+        <button class="link-btn" data-plan-cancel="${pl.id}">Cancel plan</button>
+      </div></div>`;
+  });
+
+  if (!plans.length) {
+    const opts = state.packages.map(p => `<option value="${p.id}">${esc(p.name)} · $${p.price}</option>`).join("");
+    html += `<div class="care-card enroll">
+      <div class="care-top"><span class="care-ico">➕</span><strong>Sign up for a maintenance plan</strong></div>
+      <div class="care-msg">Get an in-app reminder when your car is due, on your schedule.</div>
+      <div class="field"><label>Package</label><select data-care="pkg">${opts}</select></div>
+      <div class="field"><label>How often?</label><select data-care="freq"><option value="4">Monthly</option><option value="8">Every 2 months</option><option value="12">Quarterly</option></select></div>
+      <button class="btn-primary block" data-care-enroll="1">Sign me up</button>
+    </div>`;
+  }
+
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll("[data-rem-book]").forEach(b => b.addEventListener("click", () => {
+    const r = state.maintenanceReminders.find(x => x.id === b.dataset.remBook);
+    Store.updateMaintenanceReminder(r.id, { status: "scheduled" });
+    openBooking(r.pkgId, { vehicle: r.vehicle });
+  }));
+  wrap.querySelectorAll("[data-rem-dismiss]").forEach(b => b.addEventListener("click", () => {
+    Store.updateMaintenanceReminder(b.dataset.remDismiss, { status: "dismissed" });
+    renderCustomerCare(); updateCareBadge(); toast("Reminder dismissed.");
+  }));
+  wrap.querySelectorAll("[data-plan-book]").forEach(b => b.addEventListener("click", () => {
+    const pl = state.maintenancePlans.find(x => x.id === b.dataset.planBook);
+    Store.updateMaintenancePlan(pl.id, { nextDue: addWeeksISO(todayISO(), pl.intervalWeeks) });
+    openBooking(pl.pkgId, { vehicle: pl.vehicle });
+  }));
+  wrap.querySelectorAll("[data-plan-snooze]").forEach(b => b.addEventListener("click", () => {
+    const pl = state.maintenancePlans.find(x => x.id === b.dataset.planSnooze);
+    Store.updateMaintenancePlan(pl.id, { nextDue: addWeeksISO(todayISO(), 1) });
+    renderCustomerCare(); updateCareBadge(); toast("Snoozed 1 week.");
+  }));
+  wrap.querySelectorAll("[data-plan-cancel]").forEach(b => b.addEventListener("click", () => {
+    Store.updateMaintenancePlan(b.dataset.planCancel, { active: false });
+    renderCustomerCare(); updateCareBadge(); toast("Plan cancelled.");
+  }));
+  const enrollBtn = wrap.querySelector("[data-care-enroll]");
+  if (enrollBtn) enrollBtn.addEventListener("click", () => {
+    if (!state.packages.length) { toast("No packages available yet."); return; }
+    const me = getProfile();
+    const pkgId = wrap.querySelector('[data-care="pkg"]').value;
+    const weeks = parseInt(wrap.querySelector('[data-care="freq"]').value, 10) || 4;
+    Store.addMaintenancePlan({ phone, name: me?.name || "", vehicle: "", pkgId, intervalWeeks: weeks, nextDue: addWeeksISO(todayISO(), weeks), active: true });
+    renderCustomerCare(); updateCareBadge(); toast("You're signed up! We'll remind you when it's due.");
+  });
+}
+
+function careBadgeCount() {
+  const phone = (getProfile()?.phone || document.getElementById("lookup-phone")?.value || "").trim();
+  if (!phone) return 0;
+  const rems = state.maintenanceReminders.filter(r => r.phone === phone && r.status === "sent").length;
+  const due = state.maintenancePlans.filter(p => p.phone === phone && p.active && p.nextDue && p.nextDue <= todayISO()).length;
+  return rems + due;
+}
+function updateCareBadge() {
+  const item = document.querySelector('.nav-item[data-screen="visits"]');
+  if (!item) return;
+  const n = careBadgeCount();
+  let dot = item.querySelector(".nav-badge");
+  if (n > 0) { if (!dot) { dot = document.createElement("span"); dot.className = "nav-badge"; item.appendChild(dot); } dot.textContent = n; }
+  else if (dot) dot.remove();
+}
+
+/* ---------- maintenance: admin view (Care tab) ---------- */
+function renderMaintenanceAdmin() {
+  const pkgSel = document.getElementById("rem-pkg");
+  if (pkgSel) {
+    const cur = pkgSel.value;
+    pkgSel.innerHTML = `<option value="">No specific package</option>` +
+      state.packages.map(p => `<option value="${p.id}">${esc(p.name)} · $${p.price}</option>`).join("");
+    if (cur) pkgSel.value = cur;
+  }
+  const remList = document.getElementById("admin-reminders-list");
+  if (remList) {
+    const rems = [...state.maintenanceReminders].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    if (!rems.length) { remList.innerHTML = `<div class="empty">No reminders sent yet.</div>`; }
+    else {
+      remList.innerHTML = "";
+      rems.forEach(r => {
+        const p = pkgById(r.pkgId);
+        const cls = r.status === "scheduled" ? "completed" : r.status === "dismissed" ? "cancelled" : "requested";
+        const div = document.createElement("div");
+        div.className = "res-card";
+        div.innerHTML = `
+          <div class="res-head"><div><div class="res-title">${esc(r.name) || esc(r.phone)}</div>
+          <div class="res-sub">${esc(r.phone)}${r.vehicle ? " · " + esc(r.vehicle) : ""}</div></div>
+          <span class="badge ${cls}">${esc(r.status)}</span></div>
+          <div class="eta-banner">${esc(r.message)}</div>
+          ${p ? `<div class="care-pkg">Recommended: <b>${esc(p.name)}</b></div>` : ""}
+          <div class="res-actions"><button class="btn-secondary" data-del-rem="${r.id}">Delete</button></div>`;
+        remList.appendChild(div);
+      });
+      remList.querySelectorAll("[data-del-rem]").forEach(b => b.addEventListener("click", () => {
+        Store.removeMaintenanceReminder(b.dataset.delRem); renderMaintenanceAdmin(); toast("Reminder deleted.");
+      }));
+    }
+  }
+  const planList = document.getElementById("admin-plans-list");
+  if (planList) {
+    const plans = [...state.maintenancePlans].filter(p => p.active).sort((a, b) => (a.nextDue || "").localeCompare(b.nextDue || ""));
+    if (!plans.length) { planList.innerHTML = `<div class="empty">No active plans.</div>`; }
+    else {
+      planList.innerHTML = "";
+      plans.forEach(pl => {
+        const p = pkgById(pl.pkgId);
+        const due = pl.nextDue && pl.nextDue <= todayISO();
+        const div = document.createElement("div");
+        div.className = "res-card";
+        div.innerHTML = `
+          <div class="res-head"><div><div class="res-title">${esc(pl.name) || esc(pl.phone)}</div>
+          <div class="res-sub">${esc(pl.phone)}</div></div>
+          <span class="badge ${due ? "requested" : "assigned"}">${due ? "Due now" : "Active"}</span></div>
+          <div class="res-grid">
+            <div><div class="k">Package</div>${p ? esc(p.name) : "-"}</div>
+            <div><div class="k">Every</div>${careWeeksLabel(pl.intervalWeeks)}</div>
+            <div><div class="k">Next due</div>${pl.nextDue ? fmtDate(pl.nextDue) : "-"}</div>
+          </div>
+          <div class="res-actions"><button class="btn-secondary" data-del-plan="${pl.id}">Remove</button></div>`;
+        planList.appendChild(div);
+      });
+      planList.querySelectorAll("[data-del-plan]").forEach(b => b.addEventListener("click", () => {
+        Store.removeMaintenancePlan(b.dataset.delPlan); renderMaintenanceAdmin(); toast("Plan removed.");
+      }));
+    }
+  }
+}
+
+document.getElementById("send-reminder").addEventListener("click", () => {
+  const err = document.getElementById("reminder-error");
+  const phone = document.getElementById("rem-phone").value.trim();
+  const name = document.getElementById("rem-name").value.trim();
+  const vehicle = document.getElementById("rem-vehicle").value.trim();
+  const pkgId = document.getElementById("rem-pkg").value || null;
+  let message = document.getElementById("rem-message").value.trim();
+  if (!phone) return showErr(err, "Enter the customer's phone number.");
+  if (!message) message = "Time for your next detail! Book whenever works for you.";
+  Store.addMaintenanceReminder({ phone, name, vehicle, pkgId, message, status: "sent" });
+  err.classList.add("hidden");
+  ["rem-phone", "rem-name", "rem-vehicle", "rem-message"].forEach(id => document.getElementById(id).value = "");
+  renderMaintenanceAdmin();
+  toast("Reminder sent to " + phone + ".");
+});
+
 /* ---------- utils ---------- */
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 
@@ -833,6 +1035,8 @@ function rerender() {
   renderProfileBar();
   if (currentRole === "admin") renderAdmin();
   renderCustomerReservations();
+  renderCustomerCare();
+  updateCareBadge();
 }
 
 /* ---------- init ---------- */
