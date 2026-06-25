@@ -248,6 +248,8 @@ textarea { resize: vertical; }
 
 /* Form hint */
 .form-hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; }
+.remember-row { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--text); font-size: 14px; cursor: pointer; user-select: none; }
+.remember-row input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
 /* Profile bar */
 .profile-bar {

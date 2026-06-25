@@ -101,11 +101,26 @@ function renderForScreen(screen) {
   }
 }
 
-/* ---------- profile (device-remembered sign-in) ---------- */
+/* ---------- profile (device-remembered sign-in) ----------
+   "Remember me" ON  -> localStorage (survives browser restarts).
+   "Remember me" OFF -> sessionStorage (cleared when the tab/browser closes),
+   which is the right choice on shared or public devices. */
 const PROFILE_KEY = "brilo.profile";
-function getProfile() { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)); } catch { return null; } }
-function saveProfile(p) { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch {} }
-function signOut() { try { localStorage.removeItem(PROFILE_KEY); } catch {} }
+function getProfile() {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY) || sessionStorage.getItem(PROFILE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveProfile(p, remember = true) {
+  try {
+    const store = remember ? localStorage : sessionStorage;
+    const other = remember ? sessionStorage : localStorage;
+    store.setItem(PROFILE_KEY, JSON.stringify(p));
+    other.removeItem(PROFILE_KEY);
+  } catch {}
+}
+function signOut() { try { localStorage.removeItem(PROFILE_KEY); sessionStorage.removeItem(PROFILE_KEY); } catch {} }
 
 function renderProfileBar() {
   const bar = document.getElementById("profile-bar");
@@ -273,12 +288,13 @@ document.getElementById("signin-save").addEventListener("click", () => {
   const name = document.getElementById("signin-name").value.trim();
   const phone = document.getElementById("signin-phone").value.trim();
   if (!name || !phone) { toast("Enter your name and phone."); return; }
-  saveProfile({ name, phone });
+  const remember = document.getElementById("signin-remember").checked;
+  saveProfile({ name, phone }, remember);
   document.getElementById("signin-name").value = "";
   document.getElementById("signin-phone").value = "";
   renderProfileBar();
   renderVisitsScreen();
-  toast("Saved. Welcome, " + name + "!");
+  toast(remember ? "Saved. Welcome, " + name + "!" : "Saved for this session, " + name + ".");
 });
 
 document.getElementById("copy-link").addEventListener("click", async () => {
@@ -843,4 +859,11 @@ Store.init(rerender).then(({ cloud }) => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+
+/* Ask the browser to keep our stored data (the remembered profile) durable.
+   On iOS Safari this reduces the ~7-day eviction of an uninstalled web app's
+   storage; installed (Add to Home Screen) PWAs get persistent storage too. */
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist().catch(() => {}); }).catch(() => {});
 }
