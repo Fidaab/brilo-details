@@ -1,5 +1,5 @@
 /* BriloDetails service worker - basic offline cache */
-const CACHE = "brilo-v8";
+const CACHE = "brilo-v9";
 const ASSETS = [
   "./index.html",
   "./styles.css",
@@ -24,13 +24,18 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  const url = new URL(e.request.url);
+  // Only manage our own app shell. Let cross-origin requests (Supabase REST/
+  // realtime, the supabase-js CDN) go straight to the network so live data and
+  // auth are never served stale from cache.
+  if (url.origin !== self.location.origin) return;
+  // Network-first for the app shell: always pick up new deploys when online,
+  // fall back to cache only when offline. This ends the "stale cached app" bug.
   e.respondWith(
-    caches.match(e.request).then(cached =>
-      cached || fetch(e.request).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-        return res;
-      }).catch(() => cached)
-    )
+    fetch(e.request).then(res => {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });

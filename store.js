@@ -117,9 +117,31 @@
     if (sg.data) replace(data.suggestions, sg.data.map(fromSug));
     if (jn.data) replace(data.jobNotes, jn.data.map(fromNote));
   }
-  async function cInsert(t, row) { const { error } = await sb.from(t).insert(row); if (error) notify(error.message); }
-  async function cUpdate(t, id, patch) { const { error } = await sb.from(t).update(patch).eq("id", id); if (error) notify(error.message); }
-  async function cDelete(t, id) { const { error } = await sb.from(t).delete().eq("id", id); if (error) notify(error.message); }
+  /* A write that affects 0 rows with no error means RLS silently rejected it
+     (PostgREST returns 200 + []). For admin actions that almost always means the
+     Admin session is missing or expired. Tell the user and revert the optimistic
+     change so the UI reflects what actually persisted. */
+  function blocked() {
+    notify("Change didn't save. Your Admin session may have expired. Tap Admin and sign in again.");
+    refetchAll().then(() => onChange()).catch(() => {});
+  }
+  async function cInsert(t, row, adminOnly) {
+    if (adminOnly && CLOUD && !adminAuthed) return blocked();
+    const { error } = await sb.from(t).insert(row);
+    if (error) notify(error.message);
+  }
+  async function cUpdate(t, id, patch) {
+    if (CLOUD && !adminAuthed) return blocked();
+    const { data, error } = await sb.from(t).update(patch).eq("id", id).select();
+    if (error) return notify(error.message);
+    if (!data || data.length === 0) blocked();
+  }
+  async function cDelete(t, id) {
+    if (CLOUD && !adminAuthed) return blocked();
+    const { data, error } = await sb.from(t).delete().eq("id", id).select();
+    if (error) return notify(error.message);
+    if (!data || data.length === 0) blocked();
+  }
 
   function resPatch(p) {
     const o = {};
@@ -228,7 +250,7 @@
       m.id = m.id || newId();
       m.createdAt = Date.now();
       data.media.unshift(m);
-      if (CLOUD) cInsert("media", toMedia(m)); else saveLocal();
+      if (CLOUD) cInsert("media", toMedia(m), true); else saveLocal();
     },
     updateMedia(id, patch) {
       const m = data.media.find(x => x.id === id); if (!m) return;
@@ -270,7 +292,7 @@
     addDetailer(d) {
       d.id = d.id || newId();
       data.detailers.push(d);
-      if (CLOUD) cInsert("detailers", { id: d.id, name: d.name, phone: d.phone || "" }); else saveLocal();
+      if (CLOUD) cInsert("detailers", { id: d.id, name: d.name, phone: d.phone || "" }, true); else saveLocal();
     },
     updateDetailer(id, patch) {
       const d = data.detailers.find(x => x.id === id); if (!d) return;
@@ -291,7 +313,7 @@
     addPackage(p) {
       p.id = p.id || newId();
       data.packages.push(p);
-      if (CLOUD) cInsert("packages", toPkg(p)); else saveLocal();
+      if (CLOUD) cInsert("packages", toPkg(p), true); else saveLocal();
     },
     updatePackage(id, patch) {
       const p = data.packages.find(x => x.id === id); if (!p) return;
