@@ -54,5 +54,23 @@ create policy "update plans" on maintenance_plans for update using (true) with c
 create policy "admin plans"  on maintenance_plans for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
-alter publication supabase_realtime add table maintenance_reminders;
-alter publication supabase_realtime add table maintenance_plans;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'maintenance_reminders'
+  ) then
+    alter publication supabase_realtime add table maintenance_reminders;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'maintenance_plans'
+  ) then
+    alter publication supabase_realtime add table maintenance_plans;
+  end if;
+end $$;
